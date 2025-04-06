@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Tillåt läsning/skrivning för alla dokument under utveckling
+    match /{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Senare kan vi lägga till mer specifika regler för produktion
+    match /games/{gameId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+  }
+} 
