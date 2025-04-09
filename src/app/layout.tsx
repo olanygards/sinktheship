@@ -1,25 +1,30 @@
-import type { Metadata } from 'next'
-import './globals.css'
+import './globals.css';
+import { Inter } from 'next/font/google';
+import { AuthProvider } from '../firebase/AuthContext';
+import Navbar from './components/Navbar';
 
-export const metadata: Metadata = {
-  title: 'Sänka Skepp',
-  description: 'Ett multiplayer sänka skepp spel',
-}
+const inter = Inter({ subsets: ['latin'] });
+
+export const metadata = {
+  title: 'Sänka skepp',
+  description: 'Ett klassiskt strategispel online',
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="sv">
-      <head>
-        <link
-          rel="icon"
-          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚓</text></svg>"
-        />
-      </head>
-      <body>{children}</body>
+      <body className={inter.className}>
+        <AuthProvider>
+          <Navbar />
+          <main className="min-h-screen bg-gray-50 py-4">
+            {children}
+          </main>
+        </AuthProvider>
+      </body>
     </html>
-  )
+  );
 }

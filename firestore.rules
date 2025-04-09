@@ -2,15 +2,32 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Tillåt läsning/skrivning för alla dokument under utveckling
+    // För utvecklingsläge - tillåter all åtkomst
+    // VIKTIGT: Ändra detta före produktion!
     match /{document=**} {
       allow read, write: if true;
     }
+
+    // Kommenterade produktionsregler - aktivera dessa före produktion
+    // Authenticated users can read their own data
+    /* match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Other users can read some profile info but not all
+      allow read: if request.auth != null && 
+                    resource.data.keys().hasOnly(['username', 'stats']);
+    }
     
-    // Senare kan vi lägga till mer specifika regler för produktion
+    // Games can be created by authenticated users
     match /games/{gameId} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
-    }
+      allow create: if request.auth != null;
+      
+      // Only players in the game can update it
+      allow update: if request.auth != null && 
+                        (resource.data.players[request.auth.uid] != null ||
+                         request.resource.data.players[request.auth.uid] != null);
+    } */
   }
 } 

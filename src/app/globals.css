@@ -3,11 +3,147 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-rgb: 243, 244, 246;
+  --mint-green: #8bb8a8;
+  --paper-white: #ffffff;
+  --grid-line: #dddddd;
+  --ship-yellow: #f7d154;
+  --ship-orange: #f08a5d;
+  --ship-pink: #f26d7d;
+  --ship-blue: #62b5e5;
+  --ship-green: #97bd60;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+  background: var(--paper-white);
+  min-height: 100vh;
+  font-family: Arial, sans-serif;
+}
+
+.header {
+  background: #8bb8a8;
+  color: white;
+  padding: 1rem;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.board-container {
+  margin: 0.25rem 0;
+  background-color: white;
+}
+
+.board-cell {
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--grid-line);
+  position: relative;
+  background-color: white;
+}
+
+.coordinate-label {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  font-size: 0.875rem;
+  width: 2rem;
+  height: 2rem;
+}
+
+/* Smaller board cells for player's board */
+.small-board .board-cell {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+.small-board .coordinate-label {
+  width: 1.2rem !important;
+  height: 1.2rem !important;
+  font-size: 0.7rem;
+}
+
+.board-cell-water {
+  background-color: white;
+}
+
+.board-cell-ship {
+  background-color: #94a3b8;
+}
+
+.board-cell-hit {
+  background-color: #f87171;
+}
+
+.board-cell-miss {
+  background-color: #93c5fd;
+}
+
+/* Klasser för sänkta skepp */
+.board-cell-sunk {
+  color: white;
+  border: 2px solid #000;
+  font-weight: bold;
+  animation: sunk-pulse 2s ease-in-out 1;
+}
+
+@keyframes sunk-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.ship-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0.25rem 0;
+}
+
+.ship-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.ship-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ship-square {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #000;
+  font-weight: bold;
+}
+
+.carrier-color {
+  background-color: var(--ship-blue);
+}
+
+.battleship-color {
+  background-color: var(--ship-orange);
+}
+
+.cruiser-color {
+  background-color: var(--ship-pink);
+}
+
+.submarine-color {
+  background-color: var(--ship-yellow);
+}
+
+.destroyer-color {
+  background-color: var(--ship-green);
+}
+
+.ship-name {
+  font-size: 0.7rem;
+  white-space: nowrap;
 } 
