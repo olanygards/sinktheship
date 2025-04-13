@@ -103,6 +103,7 @@ const FriendChallenges = () => {
     setError(null);
     
     try {
+      // First update the game in Firestore
       const gameRef = doc(db, 'games', gameId);
       await updateDoc(gameRef, {
         'challengeInfo.status': 'accepted',
@@ -112,8 +113,17 @@ const FriendChallenges = () => {
         }
       });
       
-      // Sätt flaggan för att gå till "Mina spel" sidan istället för att direkt omdirigera
+      // Force clear any existing redirects first to ensure clean state
+      localStorage.removeItem('shouldRedirectToGames');
+      localStorage.removeItem('redirectTimestamp');
+      
+      // Then set fresh redirect flags
       localStorage.setItem('shouldRedirectToGames', 'true');
+      localStorage.setItem('redirectTimestamp', Date.now().toString());
+      
+      // Set a flag in session storage to indicate we're handling this particular challenge
+      // This makes it more specific to the current challenge
+      sessionStorage.setItem('handlingChallenge', gameId);
       
       // Om vi är på /active-games-sidan, ladda om sidan, annars använd router
       if (window.location.pathname === '/active-games') {
@@ -126,6 +136,10 @@ const FriendChallenges = () => {
       console.error('Error accepting challenge:', error);
       setError('Kunde inte acceptera utmaning. Försök igen.');
       setProcessing(prev => ({ ...prev, [gameId]: false }));
+      // Clear redirect flags on error
+      localStorage.removeItem('shouldRedirectToGames');
+      localStorage.removeItem('redirectTimestamp');
+      sessionStorage.removeItem('handlingChallenge');
     }
   };
 

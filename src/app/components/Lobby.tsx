@@ -80,8 +80,16 @@ const Lobby = () => {
               gameData.challengeInfo.status === 'accepted' && 
               change.type === 'modified') {
             
+            // Force clear any existing redirects first
+            localStorage.removeItem('shouldRedirectToGames');
+            localStorage.removeItem('redirectTimestamp');
+            
             // Istället för att direkt omdirigera, sätt en flagga
             localStorage.setItem('shouldRedirectToGames', 'true');
+            // Also set a timestamp to allow checking for stale redirects
+            localStorage.setItem('redirectTimestamp', Date.now().toString());
+            // Store the specific game ID to make the redirect more specific
+            localStorage.setItem('acceptedGameId', change.doc.id);
             
             // Visa ett meddelande
             setError(`Din utmaning har accepterats! Omdirigerar till "Mina spel"...`);

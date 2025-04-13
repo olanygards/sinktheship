@@ -24,6 +24,29 @@ const Navbar = () => {
     shownNotifications: []
   });
   
+  // Create a dedicated function to clear all redirect flags
+  const clearAllRedirectFlags = () => {
+    // Clear all localStorage items related to redirecting
+    localStorage.removeItem('shouldRedirectToGames');
+    localStorage.removeItem('redirectTimestamp');
+    localStorage.removeItem('acceptedGameId');
+    sessionStorage.removeItem('handlingChallenge');
+
+    // Also update the local state
+    setNotifications(prev => ({
+      ...prev,
+      showAcceptedNotification: false
+    }));
+  };
+
+  useEffect(() => {
+    // IMMEDIATE CLEANUP - Force clean localStorage flags on component mount
+    // This runs once immediately when the component mounts
+    if (pathname !== '/active-games') {
+      clearAllRedirectFlags();
+    }
+  }, []); // Empty dependency array means this runs only once on mount
+
   useEffect(() => {
     if (!currentUser) return;
 
@@ -113,11 +136,64 @@ const Navbar = () => {
     };
   }, [currentUser]);
   
+  // Check and clear the shouldRedirectToGames flag when the component mounts
+  useEffect(() => {
+    // If we're not on the active-games page, we need to check if the flag needs to be cleared
+    if (pathname !== '/active-games') {
+      const shouldRedirect = localStorage.getItem('shouldRedirectToGames');
+      if (shouldRedirect === 'true') {
+        // Check if there are actually any games to redirect to
+        const hasAcceptedGames = notifications.acceptedChallenges.length > 0;
+        if (!hasAcceptedGames) {
+          // If no games, clear the flag to avoid unnecessary redirects
+          localStorage.removeItem('shouldRedirectToGames');
+          setNotifications(prev => ({
+            ...prev,
+            showAcceptedNotification: false
+          }));
+        }
+      }
+    }
+  }, [pathname, notifications.acceptedChallenges.length]);
+  
+  // Refined check function that is stricter about when to show notifications
+  const shouldShowNotification = () => {
+    // Only show if we have actual accepted challenges
+    if (!notifications.acceptedChallenges || notifications.acceptedChallenges.length === 0) {
+      return false;
+    }
+
+    // Only show if redirect flag is set
+    const shouldRedirect = localStorage.getItem('shouldRedirectToGames');
+    if (shouldRedirect !== 'true') {
+      return false;
+    }
+
+    // Check if we have a specific game ID stored
+    const acceptedGameId = localStorage.getItem('acceptedGameId');
+    if (!acceptedGameId) {
+      return false;
+    }
+
+    // Check if the flag isn't stale
+    const timestamp = localStorage.getItem('redirectTimestamp');
+    if (!timestamp) {
+      return false;
+    }
+
+    const now = Date.now();
+    const timestampNum = parseInt(timestamp);
+    // Only allow notifications less than 30 seconds old
+    if (isNaN(timestampNum) || now - timestampNum > 30000) {
+      clearAllRedirectFlags();
+      return false;
+    }
+
+    return true;
+  };
+
   const closeNotification = () => {
-    setNotifications(prev => ({
-      ...prev,
-      showAcceptedNotification: false
-    }));
+    clearAllRedirectFlags();
   };
 
   const handleLogout = async () => {
@@ -134,9 +210,12 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <div className="flex items-center">
-            <Link href="/" className="text-2xl font-bold">
-              <span className="text-white">Sänka</span>{' '}
-              <span className="text-[var(--primary-light)]">Skepp</span>
+            <Link href="/" className="flex items-center">
+              <img 
+                src="/images/game-logo-text.svg" 
+                alt="Sänka Skepp" 
+                className="h-8 max-h-full"
+              />
             </Link>
           </div>
 
@@ -241,7 +320,7 @@ const Navbar = () => {
       </div>
 
       {/* Notifikation för accepterad utmaning */}
-      {notifications.showAcceptedNotification && notifications.acceptedChallenges.length > 0 && (
+      {notifications.showAcceptedNotification && shouldShowNotification() && (
         <div className="fixed bottom-4 right-4 bg-[var(--primary-dark)] text-white px-6 py-3 flex items-center">
           <span>Din utmaning har accepterats! Omdirigerar till dina spel...</span>
           <button 

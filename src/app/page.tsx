@@ -16,6 +16,23 @@ function HomeContent() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [startingGame, setStartingGame] = useState(false);
   
+  // Helper function to clear all redirect flags
+  const clearAllRedirectFlags = () => {
+    localStorage.removeItem('shouldRedirectToGames');
+    localStorage.removeItem('redirectTimestamp');
+    localStorage.removeItem('acceptedGameId');
+    sessionStorage.removeItem('handlingChallenge');
+  };
+  
+  // Force clear redirect flags on initial load
+  useEffect(() => {
+    // Only run this on main page with no game ID
+    if (!gameId && !isRedirecting) {
+      // Force cleanup of any lingering redirect flags
+      clearAllRedirectFlags();
+    }
+  }, [gameId, isRedirecting]);
+
   // Kontrollera om vi har sparade params i localStorage som behöver rensas
   useEffect(() => {
     if (isRedirecting) return; // Undvik att köra om vi redan omdirigerar
@@ -25,13 +42,25 @@ function HomeContent() {
       
       // Om användaren tidigare markerades för att gå till "Mina spel", omdirigera
       if (shouldRedirect === 'true' && currentUser && window.location.pathname !== '/active-games') {
-        setIsRedirecting(true);
-        // Rensa flaggan omedelbart för att undvika loopar
-        localStorage.removeItem('shouldRedirectToGames');
-        router.push('/active-games');
+        // Check if the flag is stale (set more than 5 minutes ago)
+        const redirectTimestamp = localStorage.getItem('redirectTimestamp');
+        const now = Date.now();
+        const isStale = redirectTimestamp && (now - parseInt(redirectTimestamp)) > 5 * 60 * 1000;
+        
+        if (isStale) {
+          // Clear stale redirect flags
+          clearAllRedirectFlags();
+        } else {
+          setIsRedirecting(true);
+          // Rensa flaggan omedelbart för att undvika loopar
+          clearAllRedirectFlags();
+          router.push('/active-games');
+        }
       }
     } catch (e) {
       console.error('Error checking redirect preference:', e);
+      // Clean up in case of error
+      clearAllRedirectFlags();
     }
   }, [currentUser, router, isRedirecting]);
 
