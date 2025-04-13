@@ -394,7 +394,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
     const gameRef = doc(db, 'games', gameId);
     const unsubscribe = onSnapshot(
       gameRef,
-      (docSnapshot) => {
+      async (docSnapshot) => {
         if (docSnapshot.exists()) {
           const data = docSnapshot.data() as GameState;
           console.log(`[Multiplayer] Game state updated:`, data);
@@ -415,6 +415,27 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
             setGameStatus('finished');
             const playerWon = data.winner === playerId;
             setGameMessage(playerWon ? 'Grattis, du vann spelet!' : 'Du förlorade spelet.');
+          } else if (data.status === 'placing') {
+            // Check if both players are ready to transition to playing state
+            if (data.players && Object.keys(data.players).length === 2) {
+              const allPlayersReady = Object.values(data.players).every(player => player.ready);
+              
+              if (allPlayersReady) {
+                console.log('[Multiplayer] All players ready, transitioning to playing state');
+                // Randomly determine who goes first
+                const playerIds = Object.keys(data.players);
+                const firstPlayerId = playerIds[Math.floor(Math.random() * playerIds.length)];
+                
+                // Update game status in Firestore
+                const gameRef = doc(db, 'games', gameId);
+                await updateDoc(gameRef, {
+                  status: 'playing',
+                  currentTurn: firstPlayerId
+                });
+                
+                console.log(`[Multiplayer] Game started, ${firstPlayerId} goes first`);
+              }
+            }
           }
           
           // Handle turn changes
@@ -937,7 +958,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
            </div>
            
            {/* Opponent information */}
-           <div className="p-1 flex flex-col items-center">
+           <div className="p-1 flex flex-col items-center" style={{ marginLeft: '-20px' }}>
              <h2 className="text-sm font-bold mb-1">
                {effectiveSinglePlayer ? 'Din motståndare' : 'Motståndare'}
              </h2>
@@ -966,7 +987,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
          
          {/* Opponent's board */}
          <div className="p-0 relative w-full">
-           <h2 className="text-sm font-bold mb-0 text-left">
+           <h2 className="text-sm font-bold mb-0 text-left pl-1">
              {effectiveSinglePlayer ? 'AI:s spelplan' : 'Motståndarens spelplan'}
            </h2>
            <div className={!isPlayerTurn ? "opacity-50 pointer-events-none" : ""}>
@@ -979,7 +1000,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
              
              {!isPlayerTurn && (
                <div className="absolute inset-0 flex items-center justify-center">
-                 <div className="bg-black bg-opacity-30 rounded-lg p-3 text-white text-lg font-bold">
+                 <div className="bg-black bg-opacity-30 rounded-lg p-3 text-white text-lg font-bold z-[100]">
                    {effectiveSinglePlayer ? 'AI:s tur...' : 'Väntar på motståndaren...'}
                  </div>
                </div>
@@ -988,7 +1009,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
          </div>
 
          {showTurnModal && (
-           <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+           <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
              <div className="bg-green-600 text-white px-8 py-4 rounded-lg text-xl font-bold animate-bounce">
                Din tur!
              </div>
