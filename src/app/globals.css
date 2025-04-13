@@ -3,24 +3,44 @@
 @tailwind utilities;
 
 :root {
-  --mint-green: #8bb8a8;
-  --paper-white: #ffffff;
-  --grid-line: #dddddd;
-  --ship-yellow: #f7d154;
-  --ship-orange: #f08a5d;
-  --ship-pink: #f26d7d;
-  --ship-blue: #62b5e5;
-  --ship-green: #97bd60;
+  /* Primary color - Teal (används för primära knappar, länkar) */
+  --primary: #009688;
+  --primary-light: #B2DFDB;
+  --primary-dark: #00796B;
+  
+  /* Secondary color - Light Blue (används som accent) */
+  --secondary: #03A9F4;
+  --secondary-light: #B3E5FC;
+  --secondary-dark: #0288D1;
+  
+  /* Background color - Teal 100 */
+  --background: #B2DFDB; /* Teal 100 - new background color */
+  --paper: #FFFFFF;
+  --board-background: #E8EAF6; /* Indigo 50 - lätt mörkare spelbräda */
+  --grid-line: #CFD8DC; /* Make grid lines visible */
+  
+  /* Ship colors - Pasteller från Material Design */
+  --ship-carrier: #26A69A;    /* Teal 400 - mörkare */
+  --ship-battleship: #5C6BC0; /* Indigo 400 - mörkare */
+  --ship-cruiser: #29B6F6;    /* Light Blue 400 - mörkare */
+  --ship-submarine: #FFEE58;  /* Yellow 400 - mörkare */
+  --ship-destroyer: #66BB6A;  /* Green 400 - mörkare */
+  
+  /* Game indicators */
+  --hit: #EF5350;        /* Red 400 */
+  --miss: #90CAF9;       /* Blue 200 */
+  --sunk: #D32F2F;       /* Red 700 */
 }
 
 body {
-  background: var(--paper-white);
+  background: var(--background);
   min-height: 100vh;
-  font-family: Arial, sans-serif;
+  font-family: 'Roboto', Arial, sans-serif;
+  color: #424242;       /* Gray 800 för text */
 }
 
 .header {
-  background: #8bb8a8;
+  background: var(--primary);
   color: white;
   padding: 1rem;
   width: 100%;
@@ -31,15 +51,21 @@ body {
 
 .board-container {
   margin: 0.25rem 0;
-  background-color: white;
+  background-color: var(--paper);
+  border-radius: 4px;
 }
 
 .board-cell {
   width: 2rem;
   height: 2rem;
-  border: 1px solid var(--grid-line);
+  border: 1px solid var(--grid-line, #e2e8f0); /* Add border with fallback color */
   position: relative;
-  background-color: white;
+  background-color: var(--board-background);
+  transition: all 0.15s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0; /* Remove margin since we're adding borders */
 }
 
 .coordinate-label {
@@ -50,6 +76,7 @@ body {
   font-size: 0.875rem;
   width: 2rem;
   height: 2rem;
+  color: #757575; /* Gray 600 för koordinater */
 }
 
 /* Smaller board cells for player's board */
@@ -65,66 +92,85 @@ body {
 }
 
 .board-cell-water {
-  background-color: white;
+  background-color: var(--board-background);
 }
 
 .board-cell-ship {
-  background-color: #94a3b8;
+  background-color: #B0BEC5; /* Blue Gray 200 - neutral färg för skepp */
 }
 
 .board-cell-hit {
-  background-color: #f87171;
+  background-color: var(--hit);
 }
 
 .board-cell-miss {
-  background-color: #93c5fd;
+  background-color: var(--miss);
 }
 
 /* Klasser för sänkta skepp */
 .board-cell-sunk {
-  background-color: #7f1d1d; /* Dark red for sunk ships */
-  color: #fecaca; /* Light red text/marker */
+  background-color: var(--sunk);
+  color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: bold;
-  border: 1px solid #b91c1c; /* Darker red border */
 }
 
 .sunk-ship-marker {
   /* Styles for the marker inside a sunk cell, e.g., 'X' */
-  font-size: 1.2em; /* Make X slightly larger */
+  font-size: 1.4em; /* Större X för tydlighet */
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-weight: bold;
 }
 
 .hit-marker {
-  /* Styles for hit marker, e.g., 🔥 */
-  font-size: 1em; /* Adjust as needed */
+  /* Styles for hit marker, e.g., 'X' */
+  font-size: 1.4em; /* Större X för tydlighet */
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-weight: bold;
 }
 
 .miss-marker {
   /* Styles for miss marker, e.g., · */
-  font-size: 1.5em; /* Make dot larger */
-  line-height: 0.5; /* Adjust vertical alignment */
-  color: #a1a1aa; /* Gray color for miss */
+  font-size: 1.8em; /* Make dot larger */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #42A5F5; /* Blue 400 */
 }
 
 .ship-marker {
   /* Styles for the letter marker on player's own ships */
-  font-size: 0.8em;
+  font-size: 1em;
   font-weight: bold;
-  color: white; /* Assuming ship colors have dark backgrounds */
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 /* Ship background colors (ensure these match getShipInfo colors) */
-.carrier-color { background-color: #4a7c59; }
-.battleship-color { background-color: #375e97; }
-.cruiser-color { background-color: #fb6542; }
-.submarine-color { background-color: #ffbb00; }
-.destroyer-color { background-color: #3f681c; }
-.unknown-color { background-color: gray; } /* Fallback */
+.carrier-color { background-color: var(--ship-carrier); }
+.battleship-color { background-color: var(--ship-battleship); }
+.cruiser-color { background-color: var(--ship-cruiser); }
+.submarine-color { background-color: var(--ship-submarine); }
+.destroyer-color { background-color: var(--ship-destroyer); }
+.unknown-color { background-color: #BDBDBD; } /* Gray 400 - fallback */
 
 /* Ensure coordinate labels align with potentially smaller cells */
 .small-coord-labels .coordinate-label {
@@ -159,11 +205,40 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  border: 1px solid #000;
+  border: none;
+  border-radius: 2px;
   font-weight: bold;
 }
 
 .ship-name {
   font-size: 0.7rem;
   white-space: nowrap;
+  color: #757575; /* Gray 600 för text */
+}
+
+/* Flat design button styles */
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  padding: 0.5rem 1rem;
+  border: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+}
+
+.btn-secondary {
+  background-color: #F5F5F5; /* Gray 100 */
+  color: #424242; /* Gray 800 */
+  padding: 0.5rem 1rem;
+  border: none;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background-color: #E0E0E0; /* Gray 300 */
 } 

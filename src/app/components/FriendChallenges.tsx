@@ -161,7 +161,7 @@ const FriendChallenges = () => {
   return (
     <div className="max-w-md mx-auto p-4">
       {error && (
-        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+        <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700">
           {error}
         </div>
       )}
@@ -172,7 +172,7 @@ const FriendChallenges = () => {
           <h2 className="text-xl font-bold mb-4">Mottagna utmaningar</h2>
           <div className="space-y-4">
             {receivedChallenges.map((challenge) => (
-              <div key={challenge.id} className="p-4 bg-white rounded-lg shadow">
+              <div key={challenge.id} className="p-4 bg-white/70">
                 <p className="mb-2">
                   {getFriendName(challenge.challengeInfo.challengerId)} har utmanat dig!
                 </p>
@@ -181,7 +181,7 @@ const FriendChallenges = () => {
                     onClick={() => acceptChallenge(challenge.id)}
                     className={`${
                       processing[challenge.id] ? 'bg-gray-400' : 'bg-green-500'
-                    } text-white px-4 py-2 rounded`}
+                    } text-white px-4 py-2`}
                     disabled={processing[challenge.id]}
                   >
                     {processing[challenge.id] ? 'Accepterar...' : 'Acceptera'}
@@ -190,7 +190,7 @@ const FriendChallenges = () => {
                     onClick={() => declineChallenge(challenge.id)}
                     className={`${
                       processing[challenge.id] ? 'bg-gray-400' : 'bg-red-500'
-                    } text-white px-4 py-2 rounded`}
+                    } text-white px-4 py-2`}
                     disabled={processing[challenge.id]}
                   >
                     {processing[challenge.id] ? 'Avböjer...' : 'Avböj'}
@@ -208,7 +208,7 @@ const FriendChallenges = () => {
           <h2 className="text-xl font-bold mb-4">Skickade utmaningar</h2>
           <div className="space-y-4">
             {sentChallenges.map((challenge) => (
-              <div key={challenge.id} className="p-4 bg-white rounded-lg shadow">
+              <div key={challenge.id} className="p-4 bg-white/70">
                 <p>
                   Väntar på svar från {getFriendName(challenge.challengeInfo.friendId)}
                 </p>

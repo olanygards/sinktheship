@@ -130,13 +130,13 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="bg-white shadow-sm relative">
+    <nav className="bg-[var(--primary)] text-white relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
           <div className="flex items-center">
             <Link href="/" className="text-2xl font-bold">
-              <span className="text-blue-600">Sänka</span>{' '}
-              <span className="text-blue-800">Skepp</span>
+              <span className="text-white">Sänka</span>{' '}
+              <span className="text-[var(--primary-light)]">Skepp</span>
             </Link>
           </div>
 
@@ -146,11 +146,11 @@ const Navbar = () => {
                 href="/"
                 className="relative p-2"
               >
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs">
                   {notifications.receivedChallenges}
                 </span>
                 <svg
-                  className="w-6 h-6 text-gray-600"
+                  className="w-6 h-6 text-white"
                   fill="none"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -166,7 +166,7 @@ const Navbar = () => {
             {/* Hamburger button */}
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-2 rounded-md text-gray-600 hover:text-gray-900 focus:outline-none"
+              className="p-2 text-white hover:text-[var(--primary-light)] focus:outline-none"
             >
               <svg
                 className="h-6 w-6"
@@ -192,45 +192,45 @@ const Navbar = () => {
       <div
         className={`${
           isMenuOpen ? 'block' : 'hidden'
-        } absolute top-16 left-0 right-0 bg-white shadow-lg z-50`}
+        } absolute top-16 left-0 right-0 bg-[var(--primary-dark)] text-white z-50`}
       >
         <div className="px-4 py-2 space-y-1">
           {currentUser ? (
             <>
-              <div className="px-3 py-2 text-gray-600 border-b border-gray-200">
+              <div className="px-3 py-2 text-[var(--primary-light)] border-b border-[var(--primary-light)] border-opacity-30">
                 {userProfile?.username || currentUser.displayName}
               </div>
               <Link
                 href="/active-games"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                className="block px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Mina spel
               </Link>
               <Link
                 href="/profile"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                className="block px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Min profil
               </Link>
               <Link
                 href="/stats"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                className="block px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Statistik
               </Link>
               <Link
                 href="/"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                className="block px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Lobby
               </Link>
               <button
                 onClick={handleLogout}
-                className="block w-full text-left px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                className="block w-full text-left px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
               >
                 Logga ut
               </button>
@@ -238,7 +238,7 @@ const Navbar = () => {
           ) : (
             <Link
               href="/"
-              className="block px-3 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              className="block px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
               onClick={() => setIsMenuOpen(false)}
             >
               Logga in
@@ -249,11 +249,11 @@ const Navbar = () => {
 
       {/* Notifikation för accepterad utmaning */}
       {notifications.showAcceptedNotification && notifications.acceptedChallenges.length > 0 && (
-        <div className="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center">
+        <div className="fixed bottom-4 right-4 bg-[var(--primary-dark)] text-white px-6 py-3 flex items-center">
           <span>Din utmaning har accepterats! Omdirigerar till dina spel...</span>
           <button 
             onClick={closeNotification}
-            className="ml-3 text-white hover:text-gray-200 focus:outline-none"
+            className="ml-3 text-white hover:text-[var(--primary-light)] focus:outline-none"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

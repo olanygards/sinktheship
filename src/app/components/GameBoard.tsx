@@ -20,15 +20,15 @@ interface GameBoardProps {
   isSmall?: boolean; // Optional prop for smaller boards
 }
 
-// Helper function (can be moved to utils) - make sure colors/letters match ShipPlacement
+// Helper function (can be moved to utils) - använda de nya CSS-klasserna
 const getShipInfo = (type: string) => {
     switch (type) {
-      case 'carrier': return { letter: 'A', color: 'bg-[#4a7c59]' };
-      case 'battleship': return { letter: 'B', color: 'bg-[#375e97]' };
-      case 'cruiser': return { letter: 'C', color: 'bg-[#fb6542]' };
-      case 'submarine': return { letter: 'S', color: 'bg-[#ffbb00]' };
-      case 'destroyer': return { letter: 'D', color: 'bg-[#3f681c]' };
-      default: return { letter: '?', color: 'bg-gray-400' };
+      case 'carrier': return { letter: 'A', color: 'carrier-color' };
+      case 'battleship': return { letter: 'B', color: 'battleship-color' };
+      case 'cruiser': return { letter: 'C', color: 'cruiser-color' };
+      case 'submarine': return { letter: 'S', color: 'submarine-color' };
+      case 'destroyer': return { letter: 'D', color: 'destroyer-color' };
+      default: return { letter: '?', color: 'unknown-color' };
     }
 };
 
@@ -51,57 +51,6 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard
     // Optionally return a placeholder or loading state
     return <div className="p-4 text-red-500">Error: Invalid board data.</div>;
   }
-
-  const renderCell = (cell: Cell) => {
-    let cellClass = 'board-cell';
-    
-    if (cell.isHit) {
-      if (cell.hasShip) {
-        if (cell.isSunkShip) {
-          // Sänkt skepp - Visa speciell färg baserat på skeppstyp
-          cellClass += ' board-cell-hit board-cell-sunk';
-          
-          if (cell.shipType) {
-            cellClass += ` ${cell.shipType}-color`;
-          }
-        } else {
-          // Träffat skepp, men inte sänkt
-          cellClass += ' board-cell-hit';
-        }
-      } else {
-        // Missed shot
-        cellClass += ' board-cell-miss';
-      }
-    } else if (isPlayerBoard && cell.hasShip) {
-      // Player's ships
-      cellClass += ' board-cell-ship';
-    } else {
-      // Empty water
-      cellClass += ' board-cell-water';
-    }
-
-    return (
-      <div
-        key={`${cell.x}-${cell.y}`}
-        className={cellClass}
-        onClick={() => !isPlayerBoard && !cell.isHit && onCellClick(cell.x, cell.y)}
-        data-ship-id={cell.shipId}
-        data-is-sunk={cell.isSunkShip ? 'true' : 'false'}
-      >
-        {cell.isHit && cell.hasShip && cell.isSunkShip && (
-          <div className="absolute inset-0 flex items-center justify-center text-white font-bold">
-            {cell.shipType?.charAt(0).toUpperCase()}
-          </div>
-        )}
-        {cell.isHit && cell.hasShip && !cell.isSunkShip && (
-          <div className="absolute inset-0 flex items-center justify-center text-white">X</div>
-        )}
-        {cell.isHit && !cell.hasShip && (
-          <div className="absolute inset-0 flex items-center justify-center">·</div>
-        )}
-      </div>
-    );
-  };
 
   // Generate coordinate labels A-J and 1-10
   const columnLabels = Array.from({length: 10}, (_, i) => String.fromCharCode(65 + i));
@@ -128,7 +77,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard
           ))}
         </div>
         <div 
-          className={`grid grid-cols-10 gap-0 ${isSmall ? 'small-board' : ''}`}
+          className={`grid grid-cols-10 gap-0 ${isSmall ? 'small-board' : ''} border border-[var(--grid-line)] rounded overflow-hidden`}
         >
           {board.map((row, y) => {
             // Add safety check for row validity
@@ -140,7 +89,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard
                // Add safety check for cell validity
                if (!cell || typeof cell.x !== 'number' || typeof cell.y !== 'number') {
                  console.error(`Invalid cell data at (${x}, ${y}):`, cell);
-                 return <div key={`${x}-${y}`} className="board-cell bg-red-200">!</div>; // Render an error cell
+                 return <div key={`${x}-${y}`} className="board-cell bg-red-100">!</div>; // Render an error cell
                }
 
               // Determine cell style based on its state
@@ -153,16 +102,16 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard
                   if (cell.isSunkShip) {
                     // Ship is sunk
                     cellClass += ' board-cell-sunk'; // Style for sunk ship part
-                    content = <div className="sunk-ship-marker">X</div>; 
+                    content = <div className="sunk-ship-marker">✕</div>; 
                   } else {
                     // Ship is hit but not sunk
                     cellClass += ' board-cell-hit'; // Style for regular hit
-                    content = <div className="hit-marker">🔥</div>; 
+                    content = <div className="hit-marker">✕</div>; 
                   }
                 } else {
                   // It's a miss
                   cellClass += ' board-cell-miss'; // Style for miss
-                  content = <div className="miss-marker">·</div>; 
+                  content = <div className="miss-marker">•</div>; 
                 }
               } else if (isPlayerBoard && cell.hasShip) {
                  // Show player's own ships if it's their board
@@ -176,7 +125,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard
 
               // Add hover effect only if it's the opponent's board and clickable
               if (!isPlayerBoard && !cell.isHit) {
-                 cellClass += ' hover:bg-blue-100 cursor-pointer';
+                 cellClass += ' hover:opacity-80 cursor-pointer';
               }
 
                // Add size class if small board

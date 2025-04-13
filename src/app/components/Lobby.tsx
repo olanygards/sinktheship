@@ -57,12 +57,21 @@ const Lobby = () => {
     );
 
     try {
+      // Track initial load to avoid showing acceptance messages for historical documents
+      let isInitialLoad = true;
+      
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const challenges: any[] = [];
         snapshot.forEach((doc) => {
           challenges.push({ id: doc.id, ...doc.data() });
         });
         setSentChallenges(challenges);
+
+        // Skip processing changes during initial load
+        if (isInitialLoad) {
+          isInitialLoad = false;
+          return;
+        }
 
         // Kolla om någon utmaning har accepterats
         snapshot.docChanges().forEach((change) => {
@@ -194,12 +203,47 @@ const Lobby = () => {
     <div className="max-w-4xl mx-auto p-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-white/50 backdrop-blur-sm p-6">
+            <h2 className="text-2xl font-bold mb-4">Utmana en vän</h2>
+            {friends.length > 0 ? (
+              <div className="space-y-3">
+                {friends.map((friend) => (
+                  <div 
+                    key={friend.id} 
+                    className={`flex items-center p-4 bg-white/70 hover:bg-white/90 cursor-pointer transition-colors border border-transparent hover:border-[#8bb8a8] ${challengingFriends[friend.id] ? 'opacity-70 pointer-events-none' : ''}`}
+                    onClick={() => !challengingFriends[friend.id] && handleChallengeFriend(friend.id)}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-20 overflow-hidden">
+                        <img 
+                          src={`/images/${friend.profileImage || 'player-icon-1.png'}`} 
+                          alt={friend.username} 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-lg">{friend.username}</h3>
+                        {challengingFriends[friend.id] && (
+                          <span className="text-gray-500 text-sm">Utmanar...</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500">Du har inga vänner att utmana än.</p>
+            )}
+          </div>
+
+          <FriendChallenges />
+
+          <div className="bg-white/50 backdrop-blur-sm p-6">
             <h2 className="text-2xl font-bold mb-4">Starta nytt spel</h2>
             
             <button 
               onClick={createNewGame}
-              className="bg-[#8bb8a8] text-white w-full py-4 text-lg rounded mb-4"
+              className="bg-[#8bb8a8] text-white w-full py-4 text-lg"
             >
               Skapa nytt spel
             </button>
@@ -216,11 +260,11 @@ const Lobby = () => {
                 value={gameCode}
                 onChange={(e) => setGameCode(e.target.value)}
                 placeholder="Ange spelkod"
-                className="w-full p-4 border border-gray-200 rounded"
+                className="w-full p-4 border border-gray-200"
               />
               <button 
                 onClick={joinGame}
-                className="bg-[#8bb8a8] text-white w-full py-4 text-lg rounded"
+                className="bg-[#8bb8a8] text-white w-full py-4 text-lg"
               >
                 Anslut till spel
               </button>
@@ -239,40 +283,10 @@ const Lobby = () => {
           </div>
 
           {error && (
-            <div className="p-4 bg-red-50 border border-red-100 rounded text-red-500">
+            <div className="p-4 bg-red-50 border border-red-100 text-red-500">
               {error}
             </div>
           )}
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h2 className="text-2xl font-bold mb-4">Utmana en vän</h2>
-            {friends.length > 0 ? (
-              <div className="space-y-3">
-                {friends.map((friend) => (
-                  <div key={friend.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                    <span>{friend.username}</span>
-                    <button
-                      onClick={() => handleChallengeFriend(friend.id)}
-                      className={`${
-                        challengingFriends[friend.id] 
-                          ? 'bg-gray-400 cursor-not-allowed' 
-                          : 'bg-[#8bb8a8] hover:bg-[#7aa897]'
-                      } text-white px-4 py-2 rounded transition-colors`}
-                      disabled={challengingFriends[friend.id]}
-                    >
-                      {challengingFriends[friend.id] ? 'Utmanar...' : 'Utmana'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500">Du har inga vänner att utmana än.</p>
-            )}
-          </div>
-
-          <FriendChallenges />
         </div>
       </div>
     </div>

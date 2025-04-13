@@ -20,7 +20,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <Navbar />
-          <main className="min-h-screen bg-gray-50 py-4">
+          <main className="min-h-screen bg-white py-4">
             {children}
           </main>
         </AuthProvider>

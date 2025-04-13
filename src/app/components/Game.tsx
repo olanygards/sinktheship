@@ -135,22 +135,45 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
   useEffect(() => {
     if (effectiveSinglePlayer) {
       console.log('Initializing single player game...');
-      const ai = new BattleshipAI({ difficulty, boardSize: BOARD_SIZE });
-      setAIOpponent(ai);
-      
-      // Place AI's ships
-      const aiBoard = ai.placeShips();
-      setOpponentBoard(aiBoard);
-      
-      // Initialize player's board
-      setPlayerBoard(convertToGrid(createEmptyBoard()));
-      
-      // Start the game immediately
-      setGameStatus('placing');
-      setGameMessage('Placera dina skepp på spelplanen');
-      setIsPlayerTurn(true);
+      try {
+        const ai = new BattleshipAI({ difficulty, boardSize: BOARD_SIZE });
+        setAIOpponent(ai);
+        
+        // Place AI's ships
+        console.log('Placing AI ships...');
+        const aiBoard = ai.placeShips();
+        
+        // Verifiera att AI:n kunde placera alla skepp genom att räkna antalet skepp
+        const shipCellCount = aiBoard.flat().filter(cell => cell.hasShip).length;
+        console.log(`AI placed ships: ${shipCellCount} cells have ships`);
+        
+        if (shipCellCount < 17) { // 5+4+3+3+2 = 17 celler som ska ha skepp
+          console.warn('AI could not place all ships properly, some may be missing!');
+        }
+        
+        setOpponentBoard(aiBoard);
+        
+        // Initialize player's board
+        setPlayerBoard(convertToGrid(createEmptyBoard()));
+        
+        // Start the game immediately
+        setGameStatus('placing');
+        setGameMessage('Placera dina skepp på spelplanen');
+        setIsPlayerTurn(true);
+      } catch (error) {
+        console.error('Error initializing AI game:', error);
+        
+        // Om det uppstår ett fel, återgå till single-player sidan
+        if (typeof window !== 'undefined') {
+          // Visa ett felmeddelande till användaren
+          alert('Ett fel uppstod vid initiering av spelet. Försök igen eller välj en annan svårighetsgrad.');
+          
+          // Navigera tillbaka till single-player sidan
+          router.push('/single-player');
+        }
+      }
     }
-  }, [effectiveSinglePlayer, difficulty]);
+  }, [effectiveSinglePlayer, difficulty, router]);
 
   // Handle AI's turn in single player mode
   useEffect(() => {
@@ -167,7 +190,8 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
       gameStatus === 'playing' && 
       !isPlayerTurn && 
       !aiIsProcessing && 
-      aiOpponent
+      aiOpponent &&
+      playerBoard.flat().some(cell => cell.hasShip)
     ) {
       console.log('[AI Effect Triggered] Setting aiIsProcessing to true');
       setAiIsProcessing(true);
@@ -211,6 +235,8 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
                   shipWasSunkByAI = wasSunk;
                   if(wasSunk) {
                     console.log(`[AI Turn] AI Sunk player ship ${shipTypeHitByAI}!`);
+                    // Use the new method to mark ship as sunk and reset targeting
+                    aiOpponent.markShipAsSunk(shipTypeHitByAI);
                   }
               }
 
@@ -264,7 +290,12 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
               setPlayerBoard(finalBoardForState); 
               setIsPlayerTurn(false); 
               const sunkShipCheck = checkAndMarkSunkShips(finalBoardForState, shipTypeHitByAI as ShipType); 
-              setGameMessage(sunkShipCheck.wasSunk ? `AI sänkte ditt ${shipTypeHitByAI}! AI skjuter igen...` : `AI träffade! AI skjuter igen...`);
+              if (sunkShipCheck.wasSunk) {
+                aiOpponent.markShipAsSunk(shipTypeHitByAI); // Mark ship as sunk and reset targeting
+                setGameMessage(`AI sänkte ditt ${shipTypeHitByAI}! AI skjuter igen...`);
+              } else {
+                setGameMessage(`AI träffade! AI skjuter igen...`);
+              }
               setAiIsProcessing(false); 
             } else { 
               // ... (AI miss logic) ...
@@ -354,136 +385,132 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
     }
   }, [gameId, playerId, currentUser?.uid, effectiveSinglePlayer]);
 
-  // Only use Firestore for multiplayer games
+  // Listen for game state updates when in multiplayer mode
   useEffect(() => {
-    if (!effectiveSinglePlayer) {
-      let unsubscribe: () => void;
-      let reconnectTimeout: NodeJS.Timeout;
-      let reconnectAttempts = 0;
-      const maxReconnectAttempts = 5;
-      let connectionTimeout: NodeJS.Timeout;
-      let isInitialized = false;
-      
-      const connectToGame = () => {
-        console.log('Connecting to multiplayer game...', { gameId, playerId, reconnectAttempts });
-        try {
-          setAttemptingReconnect(true);
-          const gameRef = doc(db, 'games', gameId);
+    if (effectiveSinglePlayer || !gameId) return;
+    
+    console.log(`[Multiplayer] Setting up game listener for game ${gameId}`);
+    
+    const gameRef = doc(db, 'games', gameId);
+    const unsubscribe = onSnapshot(
+      gameRef,
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const data = docSnapshot.data() as GameState;
+          console.log(`[Multiplayer] Game state updated:`, data);
           
-          connectionTimeout = setTimeout(() => {
-            if (reconnectAttempts < maxReconnectAttempts) {
-              console.log('Connection timeout, attempting reconnect...', { reconnectAttempts });
-              reconnectAttempts++;
-              connectToGame();
-            } else {
-              console.error('Max reconnection attempts reached');
-              setConnectionError('Kunde inte ansluta till spelet. Försök igen senare.');
-              setAttemptingReconnect(false);
+          // Update overall game state
+          setGameState(data);
+          
+          // Handle game status changes
+          if (data.status === 'playing' && gameStatus !== 'playing') {
+            setGameStatus('playing');
+            // Message only shown if not already playing
+            setGameMessage(
+              data.currentTurn === playerId 
+                ? 'Din tur att skjuta!' 
+                : 'Motståndarens tur.'
+            );
+          } else if (data.status === 'finished' && gameStatus !== 'finished') {
+            setGameStatus('finished');
+            const playerWon = data.winner === playerId;
+            setGameMessage(playerWon ? 'Grattis, du vann spelet!' : 'Du förlorade spelet.');
+          }
+          
+          // Handle turn changes
+          if (data.currentTurn) {
+            const isItPlayerTurn = data.currentTurn === playerId;
+            setIsPlayerTurn(isItPlayerTurn);
+            
+            // Only update message if the turn changed
+            if (isPlayerTurn !== isItPlayerTurn && data.status === 'playing') {
+              setGameMessage(isItPlayerTurn ? 'Din tur att skjuta!' : 'Motståndarens tur.');
             }
-          }, 10000);
-
-          unsubscribe = onSnapshot(gameRef, 
-            (doc) => {
-              clearTimeout(connectionTimeout);
+          }
+          
+          // Check if the opponent is set and initialize if needed
+          if (data.players && Object.keys(data.players).length === 2) {
+            const opponentKey = Object.keys(data.players).find(key => key !== playerId);
+            if (opponentKey && opponentKey !== opponentId) {
+              console.log(`[Multiplayer] Setting opponent ID: ${opponentKey}`);
+              setOpponentId(opponentKey);
+            }
+            
+            // Update player boards
+            if (playerId && data.players[playerId]) {
+              // Handle updates to player's own board (when opponent fires)
+              const newPlayerBoardFlat = data.players[playerId].board;
+              const newPlayerBoard = convertToGrid(newPlayerBoardFlat);
               
-              setConnectionError(null);
-              setAttemptingReconnect(false);
-              reconnectAttempts = 0;
+              // Check if the board has changed - opponent likely fired
+              const anyNewHits = newPlayerBoardFlat.some((cell, idx) => {
+                const oldCell = playerBoard.flat()[idx];
+                return cell.isHit && (!oldCell || !oldCell.isHit);
+              });
               
-              if (doc.exists()) {
-                const gameData = doc.data() as GameState;
-                console.log('Game data received:', {
-                  status: gameData.status,
-                  currentTurn: gameData.currentTurn,
-                  players: Object.keys(gameData.players),
-                  isInitialized
+              if (anyNewHits) {
+                console.log(`[Multiplayer] Opponent fired at player's board`);
+                setPlayerBoard(newPlayerBoard);
+                
+                // Find the most recent hit to show in message
+                const newHit = newPlayerBoardFlat.find((cell, idx) => {
+                  const oldCell = playerBoard.flat()[idx];
+                  return cell.isHit && (!oldCell || !oldCell.isHit);
                 });
                 
-                if (!isInitialized || JSON.stringify(gameState) !== JSON.stringify(gameData)) {
-                  console.log('Updating game state...');
-                  setGameState(gameData);
-                  const isYourTurn = gameData.currentTurn === playerId;
-                  setIsPlayerTurn(isYourTurn);
-                  setGameStatus(gameData.status);
-                  isInitialized = true;
-                }
-                
-                if (gameData.players[playerId]?.board) {
-                  const newPlayerBoard = convertToGrid(gameData.players[playerId].board);
-                  if (JSON.stringify(playerBoard) !== JSON.stringify(newPlayerBoard)) {
-                    console.log('Updating player board...');
-                    setPlayerBoard(newPlayerBoard);
-                  }
-                }
-                
-                const opponent = Object.keys(gameData.players).find(id => id !== playerId);
-                if (opponent) {
-                  console.log('Opponent found:', opponent);
-                  setOpponentId(opponent);
-                  
-                  if (gameData.players[opponent]?.board) {
-                    const newOpponentBoard = convertToGrid(gameData.players[opponent].board);
-                    if (JSON.stringify(opponentBoard) !== JSON.stringify(newOpponentBoard)) {
-                      console.log('Updating opponent board...');
-                      setOpponentBoard(newOpponentBoard);
+                if (newHit) {
+                  // Determine if it was a hit or miss
+                  if (newHit.hasShip) {
+                    // Check if a ship was sunk
+                    if (newHit.isSunkShip) {
+                      const shipType = newHit.shipType;
+                      setGameMessage(`Motståndaren sänkte din ${shipType || 'skepp'}!`);
+                    } else {
+                      setGameMessage('Motståndaren träffade!');
                     }
+                  } else {
+                    setGameMessage('Motståndaren missade!');
                   }
                 }
-
-                updateGameMessage(gameData);
-                
-                const allPlayersReady = Object.values(gameData.players).every(player => player.ready);
-                if (allPlayersReady && gameData.status === 'placing' && Object.keys(gameData.players).length === 2) {
-                  console.log('All players ready, transitioning to playing state...');
-                  updateGameStatus('playing');
-                }
-              } else {
-                console.error('Game document does not exist');
-                setConnectionError('Detta spel finns inte längre. Det kan ha tagits bort.');
-              }
-            },
-            (error) => {
-              clearTimeout(connectionTimeout);
-              console.error('Error fetching game data:', error);
-              setConnectionError(`Det gick inte att ansluta till spelet: ${error.message}`);
-              
-              if (reconnectAttempts < maxReconnectAttempts) {
-                reconnectAttempts++;
-                console.log('Attempting reconnect...', { reconnectAttempts });
-                reconnectTimeout = setTimeout(() => {
-                  setAttemptingReconnect(true);
-                  connectToGame();
-                }, 3000);
-              } else {
-                console.error('Max reconnection attempts reached');
-                setAttemptingReconnect(false);
               }
             }
-          );
-        } catch (error) {
-          clearTimeout(connectionTimeout);
-          console.error('Error setting up game connection:', error);
-          setConnectionError(`Det gick inte att ansluta till spelet.`);
-          setAttemptingReconnect(false);
+            
+            // Update opponent's board if available
+            if (opponentKey && data.players[opponentKey]) {
+              // Only update the opponent board when it's the player's turn to see it
+              // This prevents overwriting local hit markers when it's not player's turn
+              if (data.currentTurn === playerId || data.status === 'finished') {
+                const newOpponentBoardFlat = data.players[opponentKey].board;
+                const newOpponentBoard = convertToGrid(newOpponentBoardFlat);
+                setOpponentBoard(newOpponentBoard);
+              }
+            }
+          }
+          
+          setConnectionError('');
+        } else {
+          console.error('Game document does not exist');
+          setConnectionError('Spelet kunde inte hittas.');
         }
-      };
-
-      connectToGame();
-
-      return () => {
-        console.log('Cleaning up game connection...');
-        if (unsubscribe) {
-          unsubscribe();
-        }
-        if (reconnectTimeout) {
-          clearTimeout(reconnectTimeout);
-        }
-        if (connectionTimeout) {
-          clearTimeout(connectionTimeout);
-        }
-      };
-    }
-  }, [gameId, playerId, effectiveSinglePlayer]);
+      },
+      (error) => {
+        console.error('Error listening to game updates:', error);
+        setConnectionError('Förlorade anslutningen till spelet. Försöker återansluta...');
+        
+        // Attempt to reconnect
+        setTimeout(() => {
+          console.log('Attempting to reconnect to game...');
+          setConnectionError('Försöker återansluta...');
+          // The listener will automatically try to reconnect
+        }, 3000);
+      }
+    );
+    
+    return () => {
+      console.log('[Multiplayer] Unsubscribing from game listener');
+      unsubscribe();
+    };
+  }, [gameId, playerId, gameStatus, effectiveSinglePlayer, opponentId, isPlayerTurn, playerBoard]);
 
   const updateGameMessage = (gameData: GameState) => {
     if (gameData.status === 'waiting') {
@@ -622,8 +649,112 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
         // AI's turn logic will trigger via useEffect
       }
     } else {
-       // --- Multiplayer Logic ---
-       // ... (Existing multiplayer logic remains here)
+      // --- Multiplayer Logic ---
+      if (!gameState || !opponentId || !isPlayerTurn || gameState.status !== 'playing') return;
+      if (opponentBoard[y][x].isHit) return; // Prevent clicking already hit cells
+
+      try {
+        console.log(`[Multiplayer] Player ${playerId} firing at (${x}, ${y})`);
+        
+        // Get opponent's board from Firestore
+        const opponentBoardFlat = gameState.players[opponentId].board;
+        const targetCellIndex = opponentBoardFlat.findIndex(cell => cell.x === x && cell.y === y);
+        
+        if (targetCellIndex === -1) {
+          console.error('Target cell not found in opponent board');
+          return;
+        }
+        
+        // Check if the cell was hit
+        const wasHit = opponentBoardFlat[targetCellIndex].hasShip;
+        const shipTypeHit = opponentBoardFlat[targetCellIndex].shipType;
+        
+        // Mark cell as hit in Firestore
+        const updatedOpponentBoardFlat = [...opponentBoardFlat];
+        updatedOpponentBoardFlat[targetCellIndex] = { 
+          ...updatedOpponentBoardFlat[targetCellIndex], 
+          isHit: true 
+        };
+        
+        // Update to a grid representation for local state
+        const updatedOpponentBoard = convertToGrid(updatedOpponentBoardFlat);
+        
+        // Update Firestore with the new board state
+        const gameRef = doc(db, 'games', gameId);
+        
+        if (wasHit) {
+          console.log(`[Multiplayer] Hit at (${x}, ${y})! Ship type: ${shipTypeHit}`);
+          
+          // Check if all cells of this ship are now hit (ship is sunk)
+          let shipIsSunk = false;
+          if (shipTypeHit) {
+            const shipCells = updatedOpponentBoardFlat.filter(cell => cell.shipType === shipTypeHit);
+            shipIsSunk = shipCells.length > 0 && shipCells.every(cell => cell.isHit);
+            
+            // Mark ship cells as sunk in Firestore if the ship is sunk
+            if (shipIsSunk) {
+              console.log(`[Multiplayer] Ship ${shipTypeHit} sunk!`);
+              updatedOpponentBoardFlat.forEach((cell, idx) => {
+                if (cell.shipType === shipTypeHit) {
+                  updatedOpponentBoardFlat[idx] = { ...cell, isSunkShip: true };
+                }
+              });
+            }
+          }
+          
+          // Check for win condition
+          const allShipCells = updatedOpponentBoardFlat.filter(cell => cell.hasShip);
+          const playerWon = allShipCells.length > 0 && allShipCells.every(cell => cell.isHit);
+          
+          if (playerWon) {
+            console.log(`[Multiplayer] Player ${playerId} wins!`);
+            
+            // Update Firestore with win condition
+            await updateDoc(gameRef, {
+              [`players.${opponentId}.board`]: updatedOpponentBoardFlat,
+              status: 'finished',
+              winner: playerId
+            });
+            
+            // Update local state
+            setOpponentBoard(updatedOpponentBoard);
+            setGameStatus('finished');
+            setGameMessage('Grattis, du vann spelet!');
+            
+          } else {
+            // Hit but no win - player gets another turn
+            console.log(`[Multiplayer] Player ${playerId} gets another turn after hit`);
+            
+            await updateDoc(gameRef, {
+              [`players.${opponentId}.board`]: updatedOpponentBoardFlat,
+              currentTurn: playerId // Keep turn with current player
+            });
+            
+            // Update local state
+            setOpponentBoard(updatedOpponentBoard);
+            setIsPlayerTurn(true);
+            setGameMessage(shipIsSunk ? `Sänkt ${shipTypeHit}! Skjut igen.` : 'Träff! Skjut igen.');
+          }
+          
+        } else {
+          // Miss - switch turn to opponent
+          console.log(`[Multiplayer] Miss at (${x}, ${y}), switching turn to opponent`);
+          
+          await updateDoc(gameRef, {
+            [`players.${opponentId}.board`]: updatedOpponentBoardFlat,
+            currentTurn: opponentId // Switch turn to opponent
+          });
+          
+          // Update local state
+          setOpponentBoard(updatedOpponentBoard);
+          setIsPlayerTurn(false);
+          setGameMessage('Miss! Motståndarens tur.');
+        }
+        
+      } catch (error) {
+        console.error('Error processing multiplayer turn:', error);
+        setConnectionError('Ett fel uppstod. Försök igen.');
+      }
     }
   };
 
@@ -649,13 +780,13 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
   const renderContent = () => {
     if (gameState?.status === 'waiting' && !effectiveSinglePlayer) {
       return (
-        <div className="p-8 text-center bg-white border border-gray-200">
+        <div className="p-8 text-center bg-white">
           <h2 className="text-2xl font-bold mb-4">Väntar på motståndare</h2>
           <p className="mb-4">Dela ditt spel-ID med en vän för att börja spela:</p>
-          <div className="bg-gray-100 p-3 border border-gray-200 font-mono mb-4">{gameId}</div>
+          <div className="bg-gray-100 p-3 font-mono mb-4">{gameId}</div>
           <button 
             onClick={() => navigator.clipboard.writeText(gameId)}
-            className="bg-[#8bb8a8] text-white px-4 py-2"
+            className="bg-[#8bb8a8] text-white px-4 py-2 rounded"
           >
             Kopiera ID
           </button>
@@ -790,12 +921,12 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
 
     // Playing state rendering
     return (
-      <div className="flex flex-col gap-4 items-center justify-center bg-white">
-         <div className="flex flex-col items-center gap-4">
-           {/* Player board */}
-           <div className="p-1 bg-white">
-             <h2 className="text-lg font-bold mb-0 text-left">Din spelplan</h2>
-             <div className="small-board">
+      <div className="flex flex-col gap-2 items-center justify-center w-full">
+         <div className="flex flex-row gap-0 items-start justify-center w-full mb-1">
+           {/* Player board - smaller */}
+           <div className="p-0">
+             <h2 className="text-sm font-bold mb-0 text-left">Din spelplan</h2>
+             <div className="small-board" style={{ transform: 'scale(0.8)', transformOrigin: 'top left', margin: '0 -15px -15px 0' }}>
                <GameBoard
                  isPlayerBoard={true}
                  board={playerBoard}
@@ -804,11 +935,38 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
                />
              </div>
            </div>
+           
+           {/* Opponent information */}
+           <div className="p-1 flex flex-col items-center">
+             <h2 className="text-sm font-bold mb-1">
+               {effectiveSinglePlayer ? 'Din motståndare' : 'Motståndare'}
+             </h2>
+             <div className="w-16 h-16 overflow-hidden rounded-full mb-1">
+               <img 
+                 src={effectiveSinglePlayer 
+                   ? `/images/pirate-${difficulty}.png` 
+                   : `/images/player-icon-1.png`} 
+                 alt="Opponent" 
+                 className="w-full h-full object-cover"
+               />
+             </div>
+             <p className="font-bold text-center text-sm">
+               {effectiveSinglePlayer 
+                 ? `AI (${difficulty === 'easy' ? 'Enkel' : difficulty === 'medium' ? 'Medel' : 'Svår'})` 
+                 : 'Motståndare'}
+             </p>
+             <div className="mt-1 text-center">
+               <div className={`inline-block w-2 h-2 rounded-full ${isPlayerTurn ? 'bg-gray-300' : 'bg-green-500'} mr-1`}></div>
+               <span className={`text-xs ${isPlayerTurn ? 'text-gray-500' : 'text-green-600 font-medium'}`}>
+                 {isPlayerTurn ? 'Väntar' : 'Spelar nu'}
+               </span>
+             </div>
+           </div>
          </div>
          
          {/* Opponent's board */}
-         <div className="p-1 bg-white relative">
-           <h2 className="text-lg font-bold mb-0 text-left">
+         <div className="p-0 relative w-full">
+           <h2 className="text-sm font-bold mb-0 text-left">
              {effectiveSinglePlayer ? 'AI:s spelplan' : 'Motståndarens spelplan'}
            </h2>
            <div className={!isPlayerTurn ? "opacity-50 pointer-events-none" : ""}>
@@ -831,7 +989,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
 
          {showTurnModal && (
            <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-             <div className="bg-green-600 text-white px-8 py-4 rounded-lg shadow-lg text-xl font-bold animate-bounce">
+             <div className="bg-green-600 text-white px-8 py-4 rounded-lg text-xl font-bold animate-bounce">
                Din tur!
              </div>
            </div>
@@ -840,9 +998,127 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
     );
   };
 
+  const waitingMessageContainerStyle = {
+    display: 'flex',
+    flexDirection: 'column' as 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '1rem',
+    backgroundColor: 'white',
+    margin: '1rem auto',
+    maxWidth: '500px',
+  };
+
+  const gameIdDisplayStyle = {
+    padding: '0.5rem',
+    backgroundColor: '#f5f5f5',
+    marginBottom: '1rem',
+    fontSize: '0.9rem',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  };
+
+  const copyButtonStyle = {
+    backgroundColor: 'var(--primary)',
+    color: 'white',
+    border: 'none',
+    padding: '0.25rem 0.5rem',
+    marginLeft: '0.5rem',
+    cursor: 'pointer',
+  };
+
+  const gameContainerStyle = {
+    display: 'flex',
+    flexDirection: 'column' as 'column',
+    padding: '1rem',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    gap: '1rem',
+  };
+
+  const boardsContainerStyle = {
+    display: 'flex',
+    flexDirection: 'row' as 'row',
+    flexWrap: 'wrap' as 'wrap',
+    gap: '1rem',
+    justifyContent: 'center',
+  };
+
+  const playerBoardContainerStyle = {
+    display: 'flex',
+    flexDirection: 'column' as 'column',
+    backgroundColor: 'white',
+    padding: '1rem',
+    flex: '1',
+    minWidth: '300px',
+    maxWidth: '500px',
+  };
+
+  const turnIndicatorStyle = {
+    padding: '0.5rem',
+    backgroundColor: '#f5f5f5',
+    marginBottom: '1rem',
+    textAlign: 'center' as 'center',
+  };
+
+  const messageContainerStyle = {
+    padding: '0.5rem',
+    backgroundColor: '#f5f5f5',
+    marginBottom: '1rem',
+    textAlign: 'center' as 'center',
+  };
+
+  const chatContainerStyle = {
+    display: 'flex',
+    flexDirection: 'column' as 'column',
+    gap: '0.5rem',
+    maxHeight: '300px',
+    overflowY: 'auto' as 'auto',
+    padding: '0.5rem',
+    backgroundColor: '#f5f5f5',
+  };
+
+  const messageStyle = {
+    padding: '0.5rem',
+    backgroundColor: 'white',
+  };
+
+  const chatInputContainerStyle = {
+    display: 'flex',
+    gap: '0.5rem',
+    marginTop: '0.5rem',
+  };
+
+  const chatInputStyle = {
+    flex: '1',
+    padding: '0.5rem',
+    border: 'none',
+    backgroundColor: '#f5f5f5',
+  };
+
+  const sendButtonStyle = {
+    backgroundColor: 'var(--primary)',
+    color: 'white',
+    border: 'none',
+    padding: '0.5rem 1rem',
+    cursor: 'pointer',
+  };
+
+  const leaveButtonStyle = {
+    backgroundColor: '#f44336',
+    color: 'white',
+    border: 'none',
+    padding: '0.5rem 1rem',
+    cursor: 'pointer',
+    alignSelf: 'center',
+    marginTop: '1rem',
+  };
+
   return (
-    <div className="flex flex-col items-center gap-8 p-4">
-      <div className="w-full max-w-4xl flex justify-end">
+    <div className="flex flex-col items-center gap-2 p-0">
+      <div className="w-full flex justify-end px-2">
         <Link
           href="/active-games"
           className="text-gray-600 hover:text-gray-800 text-sm flex items-center"
@@ -855,18 +1131,18 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
       </div>
       
       {connectionError && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative max-w-xl w-full">
+        <div className="bg-red-100 text-red-700 px-4 py-3 rounded relative w-full">
           <span className="block sm:inline">{connectionError}</span>
           {attemptingReconnect && <span className="block mt-1">Försöker återansluta...</span>}
         </div>
       )}
       
       {renderContent()}
-      <div className="text-center p-4 bg-white max-w-xl w-full">
+      <div className="text-center p-2 bg-white w-full">
         <p className="text-lg font-medium">
           {gameMessage}
         </p>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-gray-500 mt-1">
           Spel-ID: {gameId}
         </p>
       </div>

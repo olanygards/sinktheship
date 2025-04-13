@@ -14,6 +14,7 @@ function HomeContent() {
   const router = useRouter();
   const { currentUser } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [startingGame, setStartingGame] = useState(false);
   
   // Kontrollera om vi har sparade params i localStorage som behöver rensas
   useEffect(() => {
@@ -34,6 +35,16 @@ function HomeContent() {
     }
   }, [currentUser, router, isRedirecting]);
 
+  const handleStartAIGame = (difficulty: string) => {
+    if (startingGame) return;
+    
+    setStartingGame(true);
+    const gameId = `ai_${Date.now()}`;
+    const playerId = `player_${Date.now()}`;
+    
+    router.push(`/?gameId=${gameId}&playerId=${playerId}&isSinglePlayer=true&difficulty=${difficulty}`);
+  };
+
   if (gameId && playerId) {
     return (
       <div className="container mx-auto">
@@ -43,31 +54,79 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[var(--background)]">
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto text-center">
-          <h1 className="text-4xl font-bold mb-6">Sänka Skepp</h1>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <Link 
-              href="/single-player"
-              className="p-6 bg-white border-2 border-[#8bb8a8] rounded-lg hover:bg-[#8bb8a8] hover:bg-opacity-10 transition-colors"
-            >
-              <h2 className="text-2xl font-semibold mb-2">Enspelarläge</h2>
-              <p className="text-gray-600">
-                Spela mot AI:n med olika svårighetsgrader
-              </p>
-            </Link>
-
-            <Link 
-              href="/active-games"
-              className="p-6 bg-white border-2 border-[#8bb8a8] rounded-lg hover:bg-[#8bb8a8] hover:bg-opacity-10 transition-colors"
-            >
-              <h2 className="text-2xl font-semibold mb-2">Flerspelarläge</h2>
-              <p className="text-gray-600">
-                Spela mot en vän online
-              </p>
-            </Link>
+          <div className="bg-white/50 backdrop-blur-sm p-6 mb-8">
+            <h2 className="text-2xl font-bold mb-4">Utmana en Ai-pirat</h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-4 bg-white/70">
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 overflow-hidden">
+                    <img 
+                      src="/images/pirate-easy.png" 
+                      alt="Easy Pirate" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-semibold text-lg">Enkel</h3>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleStartAIGame('easy')}
+                  disabled={startingGame}
+                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50"
+                >
+                  {startingGame ? 'Startar...' : 'Spela'}
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between p-4 bg-white/70">
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 overflow-hidden">
+                    <img 
+                      src="/images/pirate-medium.png" 
+                      alt="Medium Pirate" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-semibold text-lg">Medel</h3>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleStartAIGame('medium')}
+                  disabled={startingGame}
+                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50"
+                >
+                  {startingGame ? 'Startar...' : 'Spela'}
+                </button>
+              </div>
+              
+              <div className="flex items-center justify-between p-4 bg-white/70">
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 overflow-hidden">
+                    <img 
+                      src="/images/pirate-hard.png" 
+                      alt="Hard Pirate" 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="text-left">
+                    <h3 className="font-semibold text-lg">Svår</h3>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleStartAIGame('hard')}
+                  disabled={startingGame}
+                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50"
+                >
+                  {startingGame ? 'Startar...' : 'Spela'}
+                </button>
+              </div>
+            </div>
           </div>
 
           <Lobby />

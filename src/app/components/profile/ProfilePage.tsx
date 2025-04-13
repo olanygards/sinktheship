@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../firebase/AuthContext';
-import { updateUsername, getFriends, searchUsers, addFriend, removeFriend } from '../../../firebase/auth';
+import { updateUsername, getFriends, searchUsers, addFriend, removeFriend, updateProfileImage } from '../../../firebase/auth';
 
 const ProfilePage = () => {
   const { currentUser, userProfile } = useAuth();
@@ -14,11 +14,13 @@ const ProfilePage = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
+  const [selectedProfileImage, setSelectedProfileImage] = useState('');
   
   useEffect(() => {
     if (currentUser && userProfile) {
       loadFriends();
       setNewUsername(userProfile.username || currentUser.displayName || '');
+      setSelectedProfileImage(userProfile.profileImage || 'player-icon-1.png');
     }
   }, [currentUser, userProfile]);
   
@@ -104,6 +106,19 @@ const ProfilePage = () => {
     }
   };
   
+  const handleProfileImageChange = async (imageIndex: number) => {
+    if (!currentUser) return;
+    
+    try {
+      await updateProfileImage(currentUser.uid, imageIndex);
+      setSelectedProfileImage(`player-icon-${imageIndex}.png`);
+      showMessage('Profilbild uppdaterad!', 'success');
+    } catch (error) {
+      console.error('Error updating profile image:', error);
+      showMessage('Kunde inte uppdatera profilbild', 'error');
+    }
+  };
+  
   const showMessage = (text: string, type: 'success' | 'error') => {
     setMessage(text);
     setMessageType(type);
@@ -121,76 +136,110 @@ const ProfilePage = () => {
       <h1 className="text-3xl font-bold mb-8">Din profil</h1>
       
       {message && (
-        <div className={`p-3 mb-4 rounded-md ${messageType === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+        <div className={`p-3 mb-4 ${messageType === 'success' ? 'bg-[var(--primary-light)] text-[var(--primary-dark)]' : 'bg-red-100 text-red-800'}`}>
           {message}
         </div>
       )}
       
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-        <h2 className="text-xl font-semibold mb-4">Profilinformation</h2>
+      <div className="bg-white/70 p-6 mb-8">
+        <h2 className="text-2xl font-bold text-center mb-6">{userProfile.username}</h2>
         
-        <form onSubmit={handleUpdateUsername} className="mb-6">
-          <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
-              Användarnamn
-            </label>
-            <input
-              id="username"
-              type="text"
-              className="w-full p-3 border border-gray-300 rounded-md"
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              placeholder="Ditt användarnamn"
-              required
-            />
+        <div className="flex flex-col md:flex-row gap-6 mb-6">
+          <div className="md:w-1/3 flex flex-col items-center">
+            <div className="w-40 h-40 mb-6 overflow-hidden rounded-lg border-4 border-[var(--primary-light)]">
+              <img 
+                src={`/images/${selectedProfileImage}`} 
+                alt="Current profile" 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            
+            <div className="w-full">
+              <h3 className="font-medium mb-2">Välj ny profilbild</h3>
+              <div className="flex flex-wrap gap-3 mb-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((index) => (
+                  <button 
+                    key={index}
+                    onClick={() => handleProfileImageChange(index)}
+                    className={`w-12 h-12 overflow-hidden rounded-md ${selectedProfileImage === `player-icon-${index}.png` ? 'ring-2 ring-[var(--primary)]' : 'hover:ring-2 hover:ring-[var(--primary-light)]'}`}
+                  >
+                    <img 
+                      src={`/images/player-icon-${index}.png`} 
+                      alt={`Avatar ${index}`} 
+                      className="w-full h-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500">Klicka på en bild för att välja den som din profilbild</p>
+            </div>
           </div>
           
-          <button
-            type="submit"
-            className="py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            Uppdatera användarnamn
-          </button>
-        </form>
+          <div className="md:w-2/3">
+            <form onSubmit={handleUpdateUsername} className="mb-4">
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+                  Användarnamn
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  className="w-full p-3 border border-gray-300"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  placeholder="Ditt användarnamn"
+                  required
+                />
+              </div>
+              
+              <button
+                type="submit"
+                className="py-2 px-4 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] transition-colors"
+              >
+                Uppdatera användarnamn
+              </button>
+            </form>
+          </div>
+        </div>
         
         <div className="mt-6">
           <h3 className="text-lg font-medium mb-2">Statistik</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-gray-50 p-4 rounded-md text-center">
-              <p className="text-gray-500 text-sm">Spelade matcher</p>
+            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
+              <p className="text-gray-600 text-sm">Spelade matcher</p>
               <p className="text-xl font-bold">{userProfile.stats.gamesPlayed}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-md text-center">
-              <p className="text-gray-500 text-sm">Vinster</p>
+            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
+              <p className="text-gray-600 text-sm">Vinster</p>
               <p className="text-xl font-bold">{userProfile.stats.gamesWon}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-md text-center">
-              <p className="text-gray-500 text-sm">Förluster</p>
+            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
+              <p className="text-gray-600 text-sm">Förluster</p>
               <p className="text-xl font-bold">{userProfile.stats.gamesLost}</p>
             </div>
-            <div className="bg-gray-50 p-4 rounded-md text-center">
-              <p className="text-gray-500 text-sm">Vinstprocent</p>
+            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
+              <p className="text-gray-600 text-sm">Vinstprocent</p>
               <p className="text-xl font-bold">{userProfile.stats.winRate.toFixed(1)}%</p>
             </div>
           </div>
         </div>
       </div>
       
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="bg-white/70 p-6">
         <h2 className="text-xl font-semibold mb-4">Dina vänner</h2>
         
         <div className="mb-6">
           <form onSubmit={handleSearchUsers} className="flex gap-2">
             <input
               type="text"
-              className="flex-1 p-3 border border-gray-300 rounded-md"
+              className="flex-1 p-3 border border-gray-300"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Sök efter användarnamn"
             />
             <button
               type="submit"
-              className="py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="py-2 px-4 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] transition-colors"
               disabled={isSearching}
             >
               {isSearching ? 'Söker...' : 'Sök'}
@@ -203,10 +252,19 @@ const ProfilePage = () => {
               <ul className="divide-y divide-gray-200">
                 {searchResults.map(user => (
                   <li key={user.id} className="py-3 flex justify-between items-center">
-                    <span>{user.username}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 overflow-hidden rounded-full">
+                        <img 
+                          src={`/images/${user.profileImage || 'player-icon-1.png'}`} 
+                          alt={`${user.username}'s avatar`} 
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <span>{user.username}</span>
+                    </div>
                     <button
                       onClick={() => handleAddFriend(user.id)}
-                      className="py-1 px-3 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors"
+                      className="py-1 px-3 bg-[var(--primary)] text-white text-sm hover:bg-[var(--primary-dark)] transition-colors"
                     >
                       Lägg till
                     </button>
@@ -226,13 +284,20 @@ const ProfilePage = () => {
           <ul className="divide-y divide-gray-200">
             {friends.map(friend => (
               <li key={friend.id} className="py-3 flex justify-between items-center">
-                <div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 overflow-hidden rounded-full">
+                    <img 
+                      src={`/images/${friend.profileImage || 'player-icon-1.png'}`} 
+                      alt={`${friend.username}'s avatar`} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
                   <p className="font-medium">{friend.username}</p>
                 </div>
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleRemoveFriend(friend.id)}
-                    className="py-1 px-3 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
+                    className="py-1 px-3 bg-red-600 text-white text-sm hover:bg-red-700 transition-colors"
                   >
                     Ta bort
                   </button>

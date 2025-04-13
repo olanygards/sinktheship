@@ -14,6 +14,7 @@ interface AuthContextType {
 interface UserProfile {
   username: string;
   friends: string[];
+  profileImage?: string;
   stats: {
     gamesPlayed: number;
     gamesWon: number;
