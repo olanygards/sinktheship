@@ -58,6 +58,14 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
   // Add new state for tracking selected ship from board
   const [selectedShipFromBoard, setSelectedShipFromBoard] = useState<Ship | null>(null);
 
+  // Automatically select the first unplaced ship when component loads
+  useEffect(() => {
+    const firstUnplacedShip = ships.find(ship => !ship.placed);
+    if (firstUnplacedShip && !selectedShip) {
+      setSelectedShip(firstUnplacedShip);
+    }
+  }, [ships, selectedShip]);
+
   // Function to check if a ship placement is valid
   const isValidPlacement = (shipSize: number, x: number, y: number): boolean => {
     if (orientation === 'horizontal') {
@@ -183,6 +191,7 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
 
     // Disable interaction while processing
     const shipTypeToPlace = selectedShip.type;
+    const currentShipId = selectedShip.id;
     setSelectedShip(null); // Immediately remove selection to prevent multiple clicks
     
     // IMPORTANT: Clean up ALL ships of this type from the board before placing
@@ -227,12 +236,18 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
     
     // Mark this ship as placed
     const newShips = ships.map(ship => 
-      ship.id === selectedShip.id ? { ...ship, placed: true } : ship
+      ship.id === currentShipId ? { ...ship, placed: true } : ship
     );
     setShips(newShips);
     
     // Update the board in Firestore (or just return for single player)
     await updateBoard();
+    
+    // Automatically select the next unplaced ship
+    const nextUnplacedShip = newShips.find(ship => !ship.placed);
+    if (nextUnplacedShip) {
+      setSelectedShip(nextUnplacedShip);
+    }
     
     // Check if all ships are placed
     if (newShips.every(ship => ship.placed)) {
@@ -679,106 +694,79 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
       <h2 className="text-xl font-bold mb-4">Placera dina skepp</h2>
       
       <div className="mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex flex-wrap gap-2">
-            {ships.map(ship => (
+        <div className="flex flex-wrap gap-3 mb-4 justify-start">
+          {ships.map(ship => {
+            // Ship type to letter code mapping
+            const shipLetterCode = {
+              carrier: 'A',
+              battleship: 'B',
+              cruiser: 'C',
+              submarine: 'S',
+              destroyer: 'D'
+            };
+            
+            // Get letter code for the ship
+            const letterCode = ship.type ? shipLetterCode[ship.type] : '';
+            
+            // Get CSS variable for color
+            const shipColor = `var(--ship-${ship.type})`;
+            
+            return (
               <button
                 key={ship.id}
                 onClick={() => handleSelectShip(ship)}
-                className={`p-2 ${
+                className={`p-0 ${
                   selectedShip?.id === ship.id || selectedShipFromBoard?.id === ship.id
-                    ? 'bg-[var(--primary-light)]'
-                    : 'bg-[var(--board-background)]'
-                } ${ship.placed ? 'text-gray-500' : 'text-gray-700'}`}
+                    ? 'ring-2 ring-[var(--primary)]'
+                    : ''
+                } ${ship.placed ? 'opacity-70' : 'opacity-100'}`}
                 disabled={!ship.placed && allShipsPlaced}
               >
-                <div className="flex items-center gap-2">
-                  <div 
-                    className={`w-${Math.min(ship.size * 2, 10)} h-4 ${ship.type}-color`}
-                    style={{ width: `${Math.min(ship.size * 10, 50)}px` }}
-                  ></div>
-                  <span>{getShipInfo(ship.type || '').name}</span>
+                <div className="flex gap-[1px]">
+                  {Array.from({ length: ship.size }).map((_, i) => (
+                    <div 
+                      key={i} 
+                      className="ship-square"
+                      style={{ backgroundColor: shipColor }}
+                    >
+                      {letterCode}
+                    </div>
+                  ))}
                 </div>
               </button>
-            ))}
-          </div>
-          
-          <div className="flex gap-2">
-            <button 
-              className="p-2 bg-[var(--board-background)] flex items-center justify-center transition-all"
-              onClick={() => setOrientation(orientation === 'horizontal' ? 'vertical' : 'horizontal')}
-            >
-              <div className="flex items-center gap-3">
-                {/* Box with orientation indicator */}
-                <div className="w-12 h-12 bg-[var(--primary)] flex items-center justify-center">
-                  {orientation === 'horizontal' ? (
-                    <div className="w-8 h-2 bg-white"></div>
-                  ) : (
-                    <div className="w-2 h-8 bg-white"></div>
-                  )}
-                </div>
-                {/* Rotation arrows */}
-                <div className="flex flex-col">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[var(--primary)] -mb-1" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
-                  </svg>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[var(--primary)]" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" />
-                  </svg>
-                </div>
-              </div>
-            </button>
-          </div>
+            );
+          })}
         </div>
         
-        <div className="flex flex-wrap gap-4 justify-center">
-          <div className="p-4 bg-white">
-            <div className="grid grid-cols-10 gap-0 border border-[var(--grid-line)] overflow-hidden">
-              {board.map((row, rowIndex) => 
-                row.map((cell, colIndex) => {
-                  const isHovered = hoveredCells.some(c => c.x === colIndex && c.y === rowIndex);
-                  const hasShip = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.hasShip;
-                  const shipType = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.shipType;
-                  const shipId = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.shipId;
-                  const isSelectedShipCell = selectedShip && shipId === selectedShip.id.toString();
-                  
-                  let cellClass = 'board-cell';
-                  if (hasShip && shipType) {
-                    cellClass += ` ${shipType}-color`;
-                    if (isSelectedShipCell) {
-                      cellClass += ' ring-2 ring-[var(--primary)] ring-inset';
-                    }
-                  } else if (isHovered) {
-                    cellClass += isValidHover ? ' bg-green-100' : ' bg-red-100';
-                  } else {
-                    cellClass += ' board-cell-water';
-                  }
-                  
-                  return (
-                    <div
-                      key={`${rowIndex}-${colIndex}`}
-                      className={cellClass}
-                      onMouseEnter={() => setHoveredCell({ x: colIndex, y: rowIndex, isHit: false, hasShip: false })}
-                      onClick={() => handleBoardCellClick({ x: colIndex, y: rowIndex, isHit: false, hasShip: hasShip || false, shipId: shipId || null, shipType: shipType || null })}
-                    >
-                      {hasShip && shipType && (
-                        <div className="w-full h-full flex items-center justify-center text-white font-bold">
-                          {getShipInfo(shipType).letter}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
+        <div className="flex justify-center mb-4">
+          <button 
+            className="p-2 bg-[var(--board-background)] flex items-center justify-center transition-all rounded-[5px]"
+            onClick={() => setOrientation(orientation === 'horizontal' ? 'vertical' : 'horizontal')}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[var(--primary)] flex items-center justify-center">
+                {orientation === 'horizontal' ? (
+                  <div className="w-6 h-2 bg-white"></div>
+                ) : (
+                  <div className="w-2 h-6 bg-white"></div>
+                )}
+              </div>
+              <div className="flex flex-col">
+                <img 
+                  src="/images/rotate-icon.svg" 
+                  alt="Rotate Ship" 
+                  className="h-6 w-6 text-[var(--primary)]"
+                />
+              </div>
             </div>
-          </div>
+          </button>
         </div>
       </div>
       
       <div className="flex justify-between mt-6">
         <button
           onClick={handleRandomPlacement}
-          className="btn-primary"
+          className="btn-primary rounded-[5px]"
         >
           Placera slumpmässigt
         </button>
@@ -786,11 +774,86 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
         {allShipsPlaced && (
           <button
             onClick={() => setPlayerReady()}
-            className="btn-primary"
+            className="btn-primary rounded-[5px]"
           >
             Jag är klar
           </button>
         )}
+      </div>
+      
+      <div className="flex flex-wrap gap-4 justify-center">
+        <div className="p-4 bg-white rounded-[5px]">
+          <div className="grid grid-cols-10 gap-0 border border-[var(--grid-line)] overflow-hidden rounded-[5px]">
+            {board.map((row, rowIndex) => 
+              row.map((cell, colIndex) => {
+                const isHovered = hoveredCells.some(c => c.x === colIndex && c.y === rowIndex);
+                const hasShip = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.hasShip;
+                const shipType = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.shipType;
+                const shipId = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.shipId;
+                const isSelectedShipCell = selectedShip && shipId === selectedShip.id.toString();
+                
+                let cellClass = 'board-cell';
+                if (hasShip && shipType) {
+                  cellClass += ` ${shipType}-color`;
+                  if (isSelectedShipCell) {
+                    cellClass += ' ring-2 ring-[var(--primary)] ring-inset';
+                  }
+                } else if (isHovered) {
+                  cellClass += isValidHover ? ' bg-green-100' : ' bg-red-100';
+                } else {
+                  cellClass += ' board-cell-water';
+                }
+                
+                // Get ship letter and color based on shipType
+                let shipLetter = '';
+                let shipColorVar = '';
+                
+                if (shipType) {
+                  switch (shipType) {
+                    case 'carrier': 
+                      shipLetter = 'A'; 
+                      shipColorVar = 'var(--ship-carrier)';
+                      break;
+                    case 'battleship': 
+                      shipLetter = 'B'; 
+                      shipColorVar = 'var(--ship-battleship)';
+                      break;
+                    case 'cruiser': 
+                      shipLetter = 'C'; 
+                      shipColorVar = 'var(--ship-cruiser)';
+                      break;
+                    case 'submarine': 
+                      shipLetter = 'S'; 
+                      shipColorVar = 'var(--ship-submarine)';
+                      break;
+                    case 'destroyer': 
+                      shipLetter = 'D'; 
+                      shipColorVar = 'var(--ship-destroyer)';
+                      break;
+                  }
+                }
+                
+                return (
+                  <div
+                    key={`${rowIndex}-${colIndex}`}
+                    className={cellClass}
+                    onMouseEnter={() => setHoveredCell({ x: colIndex, y: rowIndex, isHit: false, hasShip: false })}
+                    onClick={() => handleBoardCellClick({ x: colIndex, y: rowIndex, isHit: false, hasShip: hasShip || false, shipId: shipId || null, shipType: shipType || null })}
+                  >
+                    {hasShip && shipType && (
+                      <div 
+                        className="w-full h-full flex items-center justify-center text-white font-bold"
+                        style={{ backgroundColor: shipColorVar }}
+                      >
+                        {shipLetter}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -15,12 +15,13 @@ const ProfilePage = () => {
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
   const [selectedProfileImage, setSelectedProfileImage] = useState('');
+  const [showNameModal, setShowNameModal] = useState(false);
   
   useEffect(() => {
     if (currentUser && userProfile) {
       loadFriends();
       setNewUsername(userProfile.username || currentUser.displayName || '');
-      setSelectedProfileImage(userProfile.profileImage || 'player-icon-1.png');
+      setSelectedProfileImage(userProfile.profileImage || 'player-icon-1.jpg');
     }
   }, [currentUser, userProfile]);
   
@@ -44,6 +45,7 @@ const ProfilePage = () => {
     try {
       await updateUsername(currentUser, newUsername);
       showMessage('Användarnamn uppdaterat!', 'success');
+      setShowNameModal(false);
     } catch (error) {
       console.error('Error updating username:', error);
       showMessage('Kunde inte uppdatera användarnamn', 'error');
@@ -111,7 +113,7 @@ const ProfilePage = () => {
     
     try {
       await updateProfileImage(currentUser.uid, imageIndex);
-      setSelectedProfileImage(`player-icon-${imageIndex}.png`);
+      setSelectedProfileImage(`player-icon-${imageIndex}.jpg`);
       showMessage('Profilbild uppdaterad!', 'success');
     } catch (error) {
       console.error('Error updating profile image:', error);
@@ -136,17 +138,28 @@ const ProfilePage = () => {
       <h1 className="text-3xl font-bold mb-8">Din profil</h1>
       
       {message && (
-        <div className={`p-3 mb-4 ${messageType === 'success' ? 'bg-[var(--primary-light)] text-[var(--primary-dark)]' : 'bg-red-100 text-red-800'}`}>
+        <div className={`p-3 mb-4 ${messageType === 'success' ? 'bg-[var(--primary-light)] text-[var(--primary-dark)]' : 'bg-red-100 text-red-800'} rounded-[5px]`}>
           {message}
         </div>
       )}
       
-      <div className="bg-white/70 p-6 mb-8">
-        <h2 className="text-2xl font-bold text-center mb-6">{userProfile.username}</h2>
+      <div className="bg-white p-6 mb-8 rounded-[5px]">
+        <div className="flex justify-center items-center mb-6 relative">
+          <h2 className="text-2xl font-bold text-center">{userProfile.username}</h2>
+          <button 
+            onClick={() => setShowNameModal(true)} 
+            className="ml-2 text-gray-500 hover:text-[var(--primary)]"
+            aria-label="Edit username"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+            </svg>
+          </button>
+        </div>
         
         <div className="flex flex-col md:flex-row gap-6 mb-6">
           <div className="md:w-1/3 flex flex-col items-center">
-            <div className="w-40 h-40 mb-6 overflow-hidden rounded-lg border-4 border-[var(--primary-light)]">
+            <div className="w-40 h-40 mb-6 overflow-hidden rounded-lg">
               <img 
                 src={`/images/${selectedProfileImage}`} 
                 alt="Current profile" 
@@ -161,10 +174,10 @@ const ProfilePage = () => {
                   <button 
                     key={index}
                     onClick={() => handleProfileImageChange(index)}
-                    className={`w-12 h-12 overflow-hidden rounded-md ${selectedProfileImage === `player-icon-${index}.png` ? 'ring-2 ring-[var(--primary)]' : 'hover:ring-2 hover:ring-[var(--primary-light)]'}`}
+                    className={`w-12 h-12 overflow-hidden rounded-full ${selectedProfileImage === `player-icon-${index}.jpg` ? 'ring-4 ring-[#8bb8a8] ring-offset-2' : 'hover:ring-2 hover:ring-[var(--primary-light)]'}`}
                   >
                     <img 
-                      src={`/images/player-icon-${index}.png`} 
+                      src={`/images/player-icon-${index}.jpg`} 
                       alt={`Avatar ${index}`} 
                       className="w-full h-full object-cover"
                     />
@@ -176,15 +189,56 @@ const ProfilePage = () => {
           </div>
           
           <div className="md:w-2/3">
-            <form onSubmit={handleUpdateUsername} className="mb-4">
+            <div className="mt-6">
+              <h3 className="text-lg font-medium mb-2">Statistik</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-[var(--primary-light)]/30 p-4 text-center rounded-[5px]">
+                  <p className="text-gray-600 text-sm">Spelade matcher</p>
+                  <p className="text-xl font-bold">{userProfile.stats.gamesPlayed}</p>
+                </div>
+                <div className="bg-[var(--primary-light)]/30 p-4 text-center rounded-[5px]">
+                  <p className="text-gray-600 text-sm">Vinster</p>
+                  <p className="text-xl font-bold">{userProfile.stats.gamesWon}</p>
+                </div>
+                <div className="bg-[var(--primary-light)]/30 p-4 text-center rounded-[5px]">
+                  <p className="text-gray-600 text-sm">Förluster</p>
+                  <p className="text-xl font-bold">{userProfile.stats.gamesLost}</p>
+                </div>
+                <div className="bg-[var(--primary-light)]/30 p-4 text-center rounded-[5px]">
+                  <p className="text-gray-600 text-sm">Vinstprocent</p>
+                  <p className="text-xl font-bold">{userProfile.stats.winRate.toFixed(1)}%</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Username Edit Modal */}
+      {showNameModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-[5px] max-w-md w-full">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium">Ändra användarnamn</h3>
+              <button 
+                onClick={() => setShowNameModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <form onSubmit={handleUpdateUsername}>
               <div className="mb-4">
                 <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
-                  Användarnamn
+                  Nytt användarnamn
                 </label>
                 <input
                   id="username"
                   type="text"
-                  className="w-full p-3 border border-gray-300"
+                  className="w-full p-3 border border-gray-300 rounded-[5px]"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
                   placeholder="Ditt användarnamn"
@@ -192,54 +246,41 @@ const ProfilePage = () => {
                 />
               </div>
               
-              <button
-                type="submit"
-                className="py-2 px-4 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] transition-colors"
-              >
-                Uppdatera användarnamn
-              </button>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNameModal(false)}
+                  className="py-2 px-4 bg-gray-200 text-gray-800 rounded-[5px]"
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  className="py-2 px-4 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] transition-colors rounded-[5px]"
+                >
+                  Spara
+                </button>
+              </div>
             </form>
           </div>
         </div>
-        
-        <div className="mt-6">
-          <h3 className="text-lg font-medium mb-2">Statistik</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
-              <p className="text-gray-600 text-sm">Spelade matcher</p>
-              <p className="text-xl font-bold">{userProfile.stats.gamesPlayed}</p>
-            </div>
-            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
-              <p className="text-gray-600 text-sm">Vinster</p>
-              <p className="text-xl font-bold">{userProfile.stats.gamesWon}</p>
-            </div>
-            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
-              <p className="text-gray-600 text-sm">Förluster</p>
-              <p className="text-xl font-bold">{userProfile.stats.gamesLost}</p>
-            </div>
-            <div className="bg-[var(--primary-light)]/30 p-4 text-center">
-              <p className="text-gray-600 text-sm">Vinstprocent</p>
-              <p className="text-xl font-bold">{userProfile.stats.winRate.toFixed(1)}%</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
       
-      <div className="bg-white/70 p-6">
+      <div className="bg-white p-6 rounded-[5px]">
         <h2 className="text-xl font-semibold mb-4">Dina vänner</h2>
         
         <div className="mb-6">
           <form onSubmit={handleSearchUsers} className="flex gap-2">
             <input
               type="text"
-              className="flex-1 p-3 border border-gray-300"
+              className="flex-1 p-3 border border-gray-300 rounded-[5px]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Sök efter användarnamn"
             />
             <button
               type="submit"
-              className="py-2 px-4 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] transition-colors"
+              className="py-2 px-4 bg-[var(--primary)] text-white hover:bg-[var(--primary-dark)] transition-colors rounded-[5px]"
               disabled={isSearching}
             >
               {isSearching ? 'Söker...' : 'Sök'}
@@ -255,7 +296,7 @@ const ProfilePage = () => {
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 overflow-hidden rounded-full">
                         <img 
-                          src={`/images/${user.profileImage || 'player-icon-1.png'}`} 
+                          src={`/images/${user.profileImage || 'player-icon-1.jpg'}`} 
                           alt={`${user.username}'s avatar`} 
                           className="w-full h-full object-cover"
                         />
@@ -264,7 +305,7 @@ const ProfilePage = () => {
                     </div>
                     <button
                       onClick={() => handleAddFriend(user.id)}
-                      className="py-1 px-3 bg-[var(--primary)] text-white text-sm hover:bg-[var(--primary-dark)] transition-colors"
+                      className="py-1 px-3 bg-[var(--primary)] text-white text-sm hover:bg-[var(--primary-dark)] transition-colors rounded-[5px]"
                     >
                       Lägg till
                     </button>
@@ -287,7 +328,7 @@ const ProfilePage = () => {
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 overflow-hidden rounded-full">
                     <img 
-                      src={`/images/${friend.profileImage || 'player-icon-1.png'}`} 
+                      src={`/images/${friend.profileImage || 'player-icon-1.jpg'}`} 
                       alt={`${friend.username}'s avatar`} 
                       className="w-full h-full object-cover"
                     />
@@ -297,7 +338,7 @@ const ProfilePage = () => {
                 <div className="flex gap-2">
                   <button
                     onClick={() => handleRemoveFriend(friend.id)}
-                    className="py-1 px-3 bg-red-600 text-white text-sm hover:bg-red-700 transition-colors"
+                    className="py-1 px-3 bg-red-600 text-white text-sm hover:bg-red-700 transition-colors rounded-[5px]"
                   >
                     Ta bort
                   </button>

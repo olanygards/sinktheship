@@ -200,23 +200,23 @@ const Lobby = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
+    <div className="max-w-4xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-6">
-          <div className="bg-white/50 backdrop-blur-sm p-6">
+          <div className="bg-white/50 backdrop-blur-sm p-6 rounded-[5px]">
             <h2 className="text-2xl font-bold mb-4">Utmana en vän</h2>
             {friends.length > 0 ? (
               <div className="space-y-3">
                 {friends.map((friend) => (
                   <div 
                     key={friend.id} 
-                    className={`flex items-center p-4 bg-white/70 hover:bg-white/90 cursor-pointer transition-colors border border-transparent hover:border-[#8bb8a8] ${challengingFriends[friend.id] ? 'opacity-70 pointer-events-none' : ''}`}
+                    className={`flex items-center p-4 bg-white cursor-pointer transition-colors border border-transparent hover:border-[#8bb8a8] rounded-[5px] ${challengingFriends[friend.id] ? 'opacity-70 pointer-events-none' : ''}`}
                     onClick={() => !challengingFriends[friend.id] && handleChallengeFriend(friend.id)}
                   >
                     <div className="flex items-center gap-4">
                       <div className="w-20 h-20 overflow-hidden">
                         <img 
-                          src={`/images/${friend.profileImage || 'player-icon-1.png'}`} 
+                          src={`/images/${friend.profileImage || 'player-icon-1.jpg'}`} 
                           alt={friend.username} 
                           className="w-full h-full object-cover"
                         />
@@ -238,12 +238,12 @@ const Lobby = () => {
 
           <FriendChallenges />
 
-          <div className="bg-white/50 backdrop-blur-sm p-6">
+          <div className="bg-white/50 backdrop-blur-sm p-6 rounded-[5px]">
             <h2 className="text-2xl font-bold mb-4">Starta nytt spel</h2>
             
             <button 
               onClick={createNewGame}
-              className="bg-[#8bb8a8] text-white w-full py-4 text-lg"
+              className="bg-[#8bb8a8] text-white w-full py-4 text-lg rounded-[5px]"
             >
               Skapa nytt spel
             </button>
@@ -260,11 +260,11 @@ const Lobby = () => {
                 value={gameCode}
                 onChange={(e) => setGameCode(e.target.value)}
                 placeholder="Ange spelkod"
-                className="w-full p-4 border border-gray-200"
+                className="w-full p-4 border border-gray-200 rounded-[5px]"
               />
               <button 
                 onClick={joinGame}
-                className="bg-[#8bb8a8] text-white w-full py-4 text-lg"
+                className="bg-[#8bb8a8] text-white w-full py-4 text-lg rounded-[5px]"
               >
                 Anslut till spel
               </button>
@@ -283,7 +283,7 @@ const Lobby = () => {
           </div>
 
           {error && (
-            <div className="p-4 bg-red-50 border border-red-100 text-red-500">
+            <div className="p-4 bg-red-50 border border-red-100 text-red-500 rounded-[5px]">
               {error}
             </div>
           )}

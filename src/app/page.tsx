@@ -58,14 +58,14 @@ function HomeContent() {
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto text-center">
           
-          <div className="bg-white/50 backdrop-blur-sm p-6 mb-8">
+          <div className="bg-white/50 backdrop-blur-sm p-6 mb-8 rounded-[5px]">
             <h2 className="text-2xl font-bold mb-4">Utmana en Ai-pirat</h2>
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-4 bg-white/70">
+              <div className="flex items-center justify-between p-4 bg-white rounded-[5px]">
                 <div className="flex items-center gap-4">
                   <div className="w-20 h-20 overflow-hidden">
                     <img 
-                      src="/images/pirate-easy.png" 
+                      src="/images/pirate-easy.jpg" 
                       alt="Easy Pirate" 
                       className="w-full h-full object-cover"
                     />
@@ -77,17 +77,17 @@ function HomeContent() {
                 <button 
                   onClick={() => handleStartAIGame('easy')}
                   disabled={startingGame}
-                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50"
+                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50 rounded-[5px]"
                 >
                   {startingGame ? 'Startar...' : 'Spela'}
                 </button>
               </div>
               
-              <div className="flex items-center justify-between p-4 bg-white/70">
+              <div className="flex items-center justify-between p-4 bg-white rounded-[5px]">
                 <div className="flex items-center gap-4">
                   <div className="w-20 h-20 overflow-hidden">
                     <img 
-                      src="/images/pirate-medium.png" 
+                      src="/images/pirate-medium.jpg" 
                       alt="Medium Pirate" 
                       className="w-full h-full object-cover"
                     />
@@ -99,17 +99,17 @@ function HomeContent() {
                 <button 
                   onClick={() => handleStartAIGame('medium')}
                   disabled={startingGame}
-                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50"
+                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50 rounded-[5px]"
                 >
                   {startingGame ? 'Startar...' : 'Spela'}
                 </button>
               </div>
               
-              <div className="flex items-center justify-between p-4 bg-white/70">
+              <div className="flex items-center justify-between p-4 bg-white rounded-[5px]">
                 <div className="flex items-center gap-4">
                   <div className="w-20 h-20 overflow-hidden">
                     <img 
-                      src="/images/pirate-hard.png" 
+                      src="/images/pirate-hard.jpg" 
                       alt="Hard Pirate" 
                       className="w-full h-full object-cover"
                     />
@@ -121,7 +121,7 @@ function HomeContent() {
                 <button 
                   onClick={() => handleStartAIGame('hard')}
                   disabled={startingGame}
-                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50"
+                  className="bg-[#8bb8a8] hover:bg-[#7aa897] text-white px-6 py-3 transition-colors disabled:opacity-50 rounded-[5px]"
                 >
                   {startingGame ? 'Startar...' : 'Spela'}
                 </button>

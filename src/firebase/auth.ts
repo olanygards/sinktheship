@@ -39,7 +39,7 @@ export const registerUser = async (email: string, password: string, username: st
     username,
     createdAt: new Date().toISOString(),
     friends: [],
-    profileImage: 'player-icon-1.png', // Default profile image
+    profileImage: 'player-icon-1.jpg', // Default profile image
     stats: {
       gamesPlayed: 0,
       gamesWon: 0,
@@ -76,7 +76,7 @@ export const updateUsername = async (user: User, newUsername: string): Promise<v
 export const updateProfileImage = async (userId: string, imageIndex: number): Promise<void> => {
   // Update Firestore document with the image choice
   await updateDoc(doc(db, 'users', userId), {
-    profileImage: `player-icon-${imageIndex}.png`
+    profileImage: `player-icon-${imageIndex}.jpg`
   });
 };
 

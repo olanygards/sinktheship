@@ -965,8 +965,8 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
              <div className="w-16 h-16 overflow-hidden rounded-full mb-1">
                <img 
                  src={effectiveSinglePlayer 
-                   ? `/images/pirate-${difficulty}.png` 
-                   : `/images/player-icon-1.png`} 
+                   ? `/images/pirate-${difficulty}.jpg` 
+                   : `/images/player-icon-1.jpg`} 
                  alt="Opponent" 
                  className="w-full h-full object-cover"
                />

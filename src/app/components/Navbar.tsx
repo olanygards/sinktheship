@@ -215,13 +215,6 @@ const Navbar = () => {
                 Min profil
               </Link>
               <Link
-                href="/stats"
-                className="block px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Statistik
-              </Link>
-              <Link
                 href="/"
                 className="block px-3 py-2 text-white hover:text-[var(--primary-light)] hover:bg-[var(--primary)] transition-colors"
                 onClick={() => setIsMenuOpen(false)}

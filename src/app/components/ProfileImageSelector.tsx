@@ -13,23 +13,23 @@ interface ProfileImageSelectorProps {
 
 const ProfileImageSelector: React.FC<ProfileImageSelectorProps> = ({ 
   userId, 
-  currentImage = 'player-icon-1.png',
+  currentImage = 'player-icon-1.jpg',
   onImageSelected
 }) => {
   const [selectedImage, setSelectedImage] = useState(currentImage);
   const [saving, setSaving] = useState(false);
 
   const profileImages = [
-    'player-icon-1.png',
-    'player-icon-2.png',
-    'player-icon-3.png',
-    'player-icon-4.png',
-    'player-icon-5.png',
-    'player-icon-6.png',
-    'player-icon-7.png',
-    'player-icon-8.png',
-    'player-icon-9.png',
-    'player-icon-10.png',
+    'player-icon-1.jpg',
+    'player-icon-2.jpg',
+    'player-icon-3.jpg',
+    'player-icon-4.jpg',
+    'player-icon-5.jpg',
+    'player-icon-6.jpg',
+    'player-icon-7.jpg',
+    'player-icon-8.jpg',
+    'player-icon-9.jpg',
+    'player-icon-10.jpg',
   ];
 
   const handleImageSelect = async (image: string) => {
