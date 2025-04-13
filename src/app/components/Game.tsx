@@ -45,22 +45,35 @@ const convertToGrid = (board: Cell[]): Cell[][] => {
   return grid;
 };
 
+type ShipType = 'carrier' | 'battleship' | 'cruiser' | 'submarine' | 'destroyer';
+
+const markCellAsHit = (board: Cell[][], x: number, y: number): Cell[][] => {
+  return board.map((row, currentY) =>
+    row.map((cell, currentX) =>
+      currentX === x && currentY === y ? { ...cell, isHit: true } : cell
+    )
+  );
+};
+
+const applySunkStatus = (board: Cell[][], shipType: ShipType): Cell[][] => {
+  return board.map(row =>
+    row.map(cell =>
+      cell.shipType === shipType ? { ...cell, isSunkShip: true } : cell
+    )
+  );
+};
+
 // Helper function to check if a ship is sunk and update the board
-const checkAndMarkSunkShips = (board: Cell[][], shipType: string): { updatedBoard: Cell[][], wasSunk: boolean } => {
+const checkAndMarkSunkShips = (board: Cell[][], shipType: ShipType): { updatedBoard: Cell[][], wasSunk: boolean } => {
   const shipCells = board.flat().filter(cell => cell.shipType === shipType);
-  // Ensure there are cells for the ship type before checking if all are hit
   const isSunk = shipCells.length > 0 && shipCells.every(cell => cell.isHit);
   let updatedBoard = board;
 
   if (isSunk) {
     console.log(`[Sunk Check] Ship type ${shipType} was sunk!`);
-    // Create a new board array with updated cells
-    updatedBoard = board.map(row =>
-      row.map(cell =>
-        cell.shipType === shipType ? { ...cell, isSunkShip: true } : cell
-      )
-    );
+    updatedBoard = applySunkStatus(board, shipType);
   }
+
   return { updatedBoard, wasSunk: isSunk };
 };
 
@@ -182,11 +195,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
           shipTypeHitByAI = targetCell.shipType; // Capture ship type here
 
           // Create the next board state based on the hit
-          nextPlayerBoard = playerBoard.map((row, currentY) =>
-            row.map((cell, currentX) =>
-              currentX === x && currentY === y ? { ...cell, isHit: true } : cell
-            )
-          );
+          nextPlayerBoard = markCellAsHit(playerBoard, x, y);
 
           aiOpponent.updateLastMove(x, y, wasHit); // Update AI's internal state
 
@@ -197,7 +206,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
 
               // Check if AI sunk a player ship
               if (shipTypeHitByAI) {
-                  const { updatedBoard, wasSunk } = checkAndMarkSunkShips(nextPlayerBoard, shipTypeHitByAI);
+                  const { updatedBoard, wasSunk } = checkAndMarkSunkShips(nextPlayerBoard, shipTypeHitByAI as ShipType);
                   boardAfterSunkCheck = updatedBoard;
                   shipWasSunkByAI = wasSunk;
                   if(wasSunk) {
@@ -254,7 +263,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
               // ... (AI extra turn logic) ...
               setPlayerBoard(finalBoardForState); 
               setIsPlayerTurn(false); 
-              const sunkShipCheck = checkAndMarkSunkShips(finalBoardForState, shipTypeHitByAI ?? ''); 
+              const sunkShipCheck = checkAndMarkSunkShips(finalBoardForState, shipTypeHitByAI as ShipType); 
               setGameMessage(sunkShipCheck.wasSunk ? `AI sänkte ditt ${shipTypeHitByAI}! AI skjuter igen...` : `AI träffade! AI skjuter igen...`);
               setAiIsProcessing(false); 
             } else { 
@@ -564,11 +573,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
       const shipTypeHit = targetCell.shipType; // Get the type of the ship hit
 
       // Mark the cell as hit
-      currentOpponentBoard = currentOpponentBoard.map((row, currentY) =>
-        row.map((cell, currentX) =>
-          currentX === x && currentY === y ? { ...cell, isHit: true } : cell
-        )
-      );
+      currentOpponentBoard = markCellAsHit(currentOpponentBoard, x, y);
 
       if (wasHit) {
         console.log(`[Player Click] Hit at (${x}, ${y})! Ship type: ${shipTypeHit}`);
@@ -578,7 +583,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
 
         // Check if the hit sunk a ship
         if (shipTypeHit) {
-          const { updatedBoard, wasSunk } = checkAndMarkSunkShips(currentOpponentBoard, shipTypeHit);
+          const { updatedBoard, wasSunk } = checkAndMarkSunkShips(currentOpponentBoard, shipTypeHit as ShipType);
           boardAfterSunkCheck = updatedBoard;
           shipWasSunk = wasSunk;
           if (wasSunk) {
@@ -608,11 +613,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
         // --- Miss Logic ---
         console.log(`[Player Click] Miss at (${x}, ${y})`);
         // Update board with miss
-         currentOpponentBoard = currentOpponentBoard.map((row, currentY) =>
-          row.map((cell, currentX) =>
-            currentX === x && currentY === y ? { ...cell, isHit: true } : cell // Mark as hit (miss)
-          )
-        );
+         currentOpponentBoard = markCellAsHit(currentOpponentBoard, x, y);
         setOpponentBoard(currentOpponentBoard);
 
         // Pass turn to AI
@@ -684,7 +685,8 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
       );
     }
 
-    if (gameStatus === 'finished' || (gameState?.status === 'finished')) {
+    const isGameFinished = gameStatus === 'finished' || gameState?.status === 'finished';
+    if (isGameFinished) {
       // Finished state - Handle Single Player
       if (effectiveSinglePlayer && gameStatus === 'finished') {
         // Determine winner based on the final game message
@@ -802,14 +804,6 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
                />
              </div>
            </div>
-           
-           {/* REMOVE the ShipStatus display during active play */}
-           {/* 
-           <div className="p-1 bg-white">
-             <h2 className="text-lg font-bold mb-0 text-left">DINA SKEPP</h2>
-             <ShipStatus ships={playerShips} />
-           </div>
-           */}
          </div>
          
          {/* Opponent's board */}
