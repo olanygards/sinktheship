@@ -49,4 +49,4 @@ export interface FriendStats {
   gamesWon: number;
   gamesLost: number;
   winRate: number;
-} 
+}

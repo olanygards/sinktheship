@@ -82,16 +82,56 @@ body {
 
 /* Klasser för sänkta skepp */
 .board-cell-sunk {
-  color: white;
-  border: 2px solid #000;
+  background-color: #7f1d1d; /* Dark red for sunk ships */
+  color: #fecaca; /* Light red text/marker */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-weight: bold;
-  animation: sunk-pulse 2s ease-in-out 1;
+  border: 1px solid #b91c1c; /* Darker red border */
 }
 
-@keyframes sunk-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); }
+.sunk-ship-marker {
+  /* Styles for the marker inside a sunk cell, e.g., 'X' */
+  font-size: 1.2em; /* Make X slightly larger */
+  line-height: 1;
+}
+
+.hit-marker {
+  /* Styles for hit marker, e.g., 🔥 */
+  font-size: 1em; /* Adjust as needed */
+  line-height: 1;
+}
+
+.miss-marker {
+  /* Styles for miss marker, e.g., · */
+  font-size: 1.5em; /* Make dot larger */
+  line-height: 0.5; /* Adjust vertical alignment */
+  color: #a1a1aa; /* Gray color for miss */
+}
+
+.ship-marker {
+  /* Styles for the letter marker on player's own ships */
+  font-size: 0.8em;
+  font-weight: bold;
+  color: white; /* Assuming ship colors have dark backgrounds */
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+/* Ship background colors (ensure these match getShipInfo colors) */
+.carrier-color { background-color: #4a7c59; }
+.battleship-color { background-color: #375e97; }
+.cruiser-color { background-color: #fb6542; }
+.submarine-color { background-color: #ffbb00; }
+.destroyer-color { background-color: #3f681c; }
+.unknown-color { background-color: gray; } /* Fallback */
+
+/* Ensure coordinate labels align with potentially smaller cells */
+.small-coord-labels .coordinate-label {
+  width: 1.5rem; /* Match small-cell width */
+  height: 1.5rem; /* Match small-cell height */
+  font-size: 0.7rem;
+  line-height: 1.5rem;
 }
 
 .ship-display {
@@ -121,26 +161,6 @@ body {
   align-items: center;
   border: 1px solid #000;
   font-weight: bold;
-}
-
-.carrier-color {
-  background-color: var(--ship-blue);
-}
-
-.battleship-color {
-  background-color: var(--ship-orange);
-}
-
-.cruiser-color {
-  background-color: var(--ship-pink);
-}
-
-.submarine-color {
-  background-color: var(--ship-yellow);
-}
-
-.destroyer-color {
-  background-color: var(--ship-green);
 }
 
 .ship-name {

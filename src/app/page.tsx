@@ -5,6 +5,7 @@ import Lobby from './components/Lobby';
 import Game from './components/Game';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '../firebase/AuthContext';
+import Link from 'next/link';
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -42,9 +43,35 @@ function HomeContent() {
   }
 
   return (
-    <div className="container mx-auto">
-      <main className="min-h-screen flex items-center justify-center">
-        <Lobby />
+    <div className="min-h-screen bg-white">
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-2xl mx-auto text-center">
+          <h1 className="text-4xl font-bold mb-6">Sänka Skepp</h1>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <Link 
+              href="/single-player"
+              className="p-6 bg-white border-2 border-[#8bb8a8] rounded-lg hover:bg-[#8bb8a8] hover:bg-opacity-10 transition-colors"
+            >
+              <h2 className="text-2xl font-semibold mb-2">Enspelarläge</h2>
+              <p className="text-gray-600">
+                Spela mot AI:n med olika svårighetsgrader
+              </p>
+            </Link>
+
+            <Link 
+              href="/active-games"
+              className="p-6 bg-white border-2 border-[#8bb8a8] rounded-lg hover:bg-[#8bb8a8] hover:bg-opacity-10 transition-colors"
+            >
+              <h2 className="text-2xl font-semibold mb-2">Flerspelarläge</h2>
+              <p className="text-gray-600">
+                Spela mot en vän online
+              </p>
+            </Link>
+          </div>
+
+          <Lobby />
+        </div>
       </main>
     </div>
   );
