@@ -942,80 +942,78 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
 
     // Playing state rendering
     return (
-      <div className="flex flex-col gap-2 items-center justify-center w-full">
-         <div className="flex flex-row gap-0 items-start justify-center w-full mb-1">
-           {/* Player board - smaller */}
-           <div className="p-0">
-             <h2 className="text-sm font-bold mb-0 text-left">Din spelplan</h2>
-             <div className="small-board" style={{ transform: 'scale(0.8)', transformOrigin: 'top left', margin: '0 -15px -15px 0' }}>
-               <GameBoard
-                 isPlayerBoard={true}
-                 board={playerBoard}
-                 onCellClick={() => {}} // Player board not clickable during play
-                 isSmall={true}
-               />
-             </div>
-           </div>
-           
-           {/* Opponent information */}
-           <div className="p-1 flex flex-col items-center" style={{ marginLeft: '-20px' }}>
-             <h2 className="text-sm font-bold mb-1">
-               {effectiveSinglePlayer ? 'Din motståndare' : 'Motståndare'}
-             </h2>
-             <div className="w-16 h-16 overflow-hidden rounded-full mb-1">
-               <img 
-                 src={effectiveSinglePlayer 
-                   ? `/images/pirate-${difficulty}.jpg` 
-                   : `/images/player-icon-1.jpg`} 
-                 alt="Opponent" 
-                 className="w-full h-full object-cover"
-               />
-             </div>
-             <p className="font-bold text-center text-sm">
-               {effectiveSinglePlayer 
-                 ? `AI (${difficulty === 'easy' ? 'Enkel' : difficulty === 'medium' ? 'Medel' : 'Svår'})` 
-                 : 'Motståndare'}
-             </p>
-             <div className="mt-1 text-center">
-               <div className={`inline-block w-2 h-2 rounded-full ${isPlayerTurn ? 'bg-gray-300' : 'bg-green-500'} mr-1`}></div>
-               <span className={`text-xs ${isPlayerTurn ? 'text-gray-500' : 'text-green-600 font-medium'}`}>
-                 {isPlayerTurn ? 'Väntar' : 'Spelar nu'}
-               </span>
-             </div>
-           </div>
-         </div>
-         
-         {/* Opponent's board */}
-         <div className="p-0 relative w-full">
-           <h2 className="text-sm font-bold mb-0 text-left pl-1">
-             {effectiveSinglePlayer ? 'AI:s spelplan' : 'Motståndarens spelplan'}
-           </h2>
-           <div className={!isPlayerTurn ? "opacity-50 pointer-events-none" : ""}>
-             <GameBoard
-               isPlayerBoard={false}
-               board={opponentBoard}
-               onCellClick={handleCellClick}
-               isSmall={false}
-             />
-             
-             {!isPlayerTurn && (
-               <div className="absolute inset-0 flex items-center justify-center">
-                 <div className="bg-black bg-opacity-30 rounded-lg p-3 text-white text-lg font-bold z-[100]">
-                   {effectiveSinglePlayer ? 'AI:s tur...' : 'Väntar på motståndaren...'}
-                 </div>
-               </div>
-             )}
-           </div>
-         </div>
+      <div className="flex flex-col gap-4 items-center justify-center w-full">
+        {/* Top row with player board and opponent info */}
+        <div className="flex flex-row items-start justify-center w-full space-x-4">
+          {/* Player board - smaller */}
+          <div className="flex-shrink-0">
+            <h2 className="text-sm font-bold mb-0 text-center">Din spelplan</h2>
+            <div className="small-board bg-white p-1 rounded">
+              <GameBoard
+                isPlayerBoard={true}
+                board={playerBoard}
+                onCellClick={() => {}}
+                isSmall={true}
+              />
+            </div>
+          </div>
+          
+          {/* Opponent information */}
+          <div className="flex-shrink-0 px-2 rounded">
+            <h2 className="text-sm font-bold mb-5 text-center">
+              {effectiveSinglePlayer ? 'Din motståndare' : 'Motståndare'}
+            </h2>
+            <div className="w-24 h-24 overflow-hidden rounded-full mb-2 ms-2">
+              <img 
+                src={effectiveSinglePlayer 
+                  ? `/images/pirate-${difficulty}.jpg` 
+                  : `/images/player-icon-1.jpg`} 
+                alt="Opponent" 
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <p className="font-bold text-center text-sm">
+              {effectiveSinglePlayer 
+                ? `AI (${difficulty === 'easy' ? 'Enkel' : difficulty === 'medium' ? 'Medel' : 'Svår'})` 
+                : 'Motståndare'}
+            </p>
+            <div className="mt-2 text-center">
+              <div className={`inline-block w-2 h-2 rounded-full ${isPlayerTurn ? 'bg-gray-300' : 'bg-green-500'} mr-1`}></div>
+              <span className={`text-xs ${isPlayerTurn ? 'text-gray-500' : 'text-green-600 font-medium'}`}>
+                {isPlayerTurn ? 'Väntar' : 'Spelar nu'}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Opponent's board */}
+        <div className="w-full bg-white p-2 rounded">
+          <div className={!isPlayerTurn ? "opacity-50 pointer-events-none" : ""}>
+            <GameBoard
+              isPlayerBoard={false}
+              board={opponentBoard}
+              onCellClick={handleCellClick}
+              isSmall={false}
+            />
+            
+            {!isPlayerTurn && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="bg-black bg-opacity-30 rounded-lg p-3 text-white text-lg font-bold z-[100]">
+                  {effectiveSinglePlayer ? 'AI:s tur...' : 'Väntar på motståndaren...'}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
-         {showTurnModal && (
-           <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
-             <div className="bg-green-600 text-white px-8 py-4 rounded-lg text-xl font-bold animate-bounce">
-               Din tur!
-             </div>
-           </div>
-         )}
-       </div>
+        {showTurnModal && (
+          <div className="fixed inset-0 flex items-center justify-center z-[100] pointer-events-none">
+            <div className="bg-green-600 text-white px-8 py-4 rounded-lg text-xl font-bold animate-bounce">
+              Din tur!
+            </div>
+          </div>
+        )}
+      </div>
     );
   };
 
@@ -1138,8 +1136,8 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
   };
 
   return (
-    <div className="flex flex-col items-center gap-2 p-0">
-      <div className="w-full flex justify-end px-2">
+    <div className="flex flex-col items-center justify-center w-full max-w-[400px] mx-auto px-2">
+      <div className="w-full flex justify-end mb-4">
         <Link
           href="/active-games"
           className="text-gray-600 hover:text-gray-800 text-sm flex items-center"
@@ -1152,14 +1150,14 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
       </div>
       
       {connectionError && (
-        <div className="bg-red-100 text-red-700 px-4 py-3 rounded relative w-full">
+        <div className="bg-red-100 text-red-700 px-4 py-3 rounded relative w-full mb-4">
           <span className="block sm:inline">{connectionError}</span>
           {attemptingReconnect && <span className="block mt-1">Försöker återansluta...</span>}
         </div>
       )}
       
       {renderContent()}
-      <div className="text-center p-2 bg-white w-full">
+      <div className="text-center p-2 bg-white w-full mt-4">
         <p className="text-lg font-medium">
           {gameMessage}
         </p>

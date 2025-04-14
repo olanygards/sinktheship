@@ -315,7 +315,22 @@ export class BattleshipAI {
     for (let y = 0; y < this.config.boardSize; y++) {
       for (let x = 0; x < this.config.boardSize; x++) {
         if (!opponentBoard[y][x].isHit) {
+          // For hard difficulty, skip cells adjacent to sunk ships
+          if (this.config.difficulty === 'hard' && this.isAdjacentToSunkShip(opponentBoard, x, y)) {
+            continue;
+          }
           availableMoves.push({ x, y });
+        }
+      }
+    }
+    
+    // If no valid moves available (shouldn't happen in normal gameplay), return a fallback move
+    if (availableMoves.length === 0) {
+      for (let y = 0; y < this.config.boardSize; y++) {
+        for (let x = 0; x < this.config.boardSize; x++) {
+          if (!opponentBoard[y][x].isHit) {
+            availableMoves.push({ x, y });
+          }
         }
       }
     }
@@ -345,9 +360,10 @@ export class BattleshipAI {
         y: lastInChain.y + (this.hitDirection === 'vertical' ? Math.sign(dy) : 0)
       };
       
-      // Check if next position is valid and not already hit
+      // Check if next position is valid, not already hit, and not adjacent to a sunk ship
       if (this.isValidPosition(nextForward.x, nextForward.y) && 
-          !opponentBoard[nextForward.y][nextForward.x].isHit) {
+          !opponentBoard[nextForward.y][nextForward.x].isHit &&
+          (this.config.difficulty !== 'hard' || !this.isAdjacentToSunkShip(opponentBoard, nextForward.x, nextForward.y))) {
         return nextForward;
       }
       
@@ -358,7 +374,8 @@ export class BattleshipAI {
       };
       
       if (this.isValidPosition(nextBackward.x, nextBackward.y) && 
-          !opponentBoard[nextBackward.y][nextBackward.x].isHit) {
+          !opponentBoard[nextBackward.y][nextBackward.x].isHit &&
+          (this.config.difficulty !== 'hard' || !this.isAdjacentToSunkShip(opponentBoard, nextBackward.x, nextBackward.y))) {
         return nextBackward;
       }
       
@@ -375,18 +392,41 @@ export class BattleshipAI {
         { x: 0, y: -1 }
       ];
       
+      // Shuffle directions for more varied gameplay
+      for (let i = directions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [directions[i], directions[j]] = [directions[j], directions[i]];
+      }
+      
       for (const dir of directions) {
         const x = this.hitChain[0].x + dir.x;
         const y = this.hitChain[0].y + dir.y;
         
-        if (this.isValidPosition(x, y) && !opponentBoard[y][x].isHit) {
+        if (this.isValidPosition(x, y) && !opponentBoard[y][x].isHit &&
+            (this.config.difficulty !== 'hard' || !this.isAdjacentToSunkShip(opponentBoard, x, y))) {
           return { x, y };
         }
       }
     }
     
     // If no hit chain or all targeted positions are invalid, make a random move
-    return this.makeRandomMove(opponentBoard);
+    if (this.config.difficulty === 'hard') {
+      // For hard difficulty, use the probabilistic approach to pick a random move
+      const availableMoves: { x: number; y: number }[] = [];
+      
+      for (let y = 0; y < this.config.boardSize; y++) {
+        for (let x = 0; x < this.config.boardSize; x++) {
+          if (!opponentBoard[y][x].isHit && !this.isAdjacentToSunkShip(opponentBoard, x, y)) {
+            availableMoves.push({ x, y });
+          }
+        }
+      }
+      
+      return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+    } else {
+      // For medium difficulty, just make a random move
+      return this.makeRandomMove(opponentBoard);
+    }
   }
 
   private isValidPosition(x: number, y: number): boolean {
@@ -592,6 +632,66 @@ export class BattleshipAI {
     return value;
   }
 
+  // Get the remaining ship sizes, excluding already sunk ships
+  private getRemainingShipSizes(): number[] {
+    const allShips = [
+      { type: 'carrier', size: 5 },
+      { type: 'battleship', size: 4 },
+      { type: 'cruiser', size: 3 },
+      { type: 'submarine', size: 3 },
+      { type: 'destroyer', size: 2 }
+    ];
+    
+    return allShips
+      .filter(ship => !this.sunkShips.has(ship.type))
+      .map(ship => ship.size);
+  }
+
+  // Check cells that should be avoided due to being adjacent to sunk ships
+  private isAdjacentToSunkShip(opponentBoard: Cell[][], x: number, y: number): boolean {
+    // All 8 directions including diagonals
+    const directions = [
+      { x: 1, y: 0 },  // right
+      { x: -1, y: 0 }, // left
+      { x: 0, y: 1 },  // down
+      { x: 0, y: -1 }, // up
+      { x: 1, y: 1 },  // down-right
+      { x: -1, y: 1 }, // down-left
+      { x: 1, y: -1 }, // up-right
+      { x: -1, y: -1 } // up-left
+    ];
+    
+    // Check if this cell is adjacent to a cell with a sunk ship
+    for (const dir of directions) {
+      const nx = x + dir.x;
+      const ny = y + dir.y;
+      
+      if (this.isValidPosition(nx, ny)) {
+        const cell = opponentBoard[ny][nx];
+        if (cell.isHit && cell.hasShip && cell.shipType && this.sunkShips.has(cell.shipType)) {
+          return true; // This cell is adjacent to a sunk ship
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  // Check if a ship can fit at the position (simpler than canPlaceShip)
+  private canFitShip(opponentBoard: Cell[][], x: number, y: number, size: number, isHorizontal: boolean): boolean {
+    for (let i = 0; i < size; i++) {
+      const checkX = isHorizontal ? x + i : x;
+      const checkY = isHorizontal ? y : y + i;
+      
+      if (checkX >= this.config.boardSize || checkY >= this.config.boardSize) return false;
+      if (opponentBoard[checkY][checkX].isHit && !opponentBoard[checkY][checkX].hasShip) return false;
+      
+      // Skip positions adjacent to sunk ships (they can't contain ships)
+      if (this.isAdjacentToSunkShip(opponentBoard, checkX, checkY)) return false;
+    }
+    return true;
+  }
+
   private createProbabilityMap(opponentBoard: Cell[][]): number[][] {
     const probabilityMap = Array(this.config.boardSize).fill(0).map(() => 
       Array(this.config.boardSize).fill(0)
@@ -604,6 +704,12 @@ export class BattleshipAI {
     for (let y = 0; y < this.config.boardSize; y++) {
       for (let x = 0; x < this.config.boardSize; x++) {
         if (!opponentBoard[y][x].isHit) {
+          // Skip cells adjacent to sunk ships since they can't contain ships
+          if (this.isAdjacentToSunkShip(opponentBoard, x, y)) {
+            probabilityMap[y][x] = 0;
+            continue;
+          }
+          
           // Check horizontal possibilities for each remaining ship size
           for (const size of remainingShips) {
             if (this.canFitShip(opponentBoard, x, y, size, true)) {
@@ -648,7 +754,10 @@ export class BattleshipAI {
           const ny = hit.y + dir.y;
           
           if (this.isValidPosition(nx, ny) && !opponentBoard[ny][nx].isHit) {
-            probabilityMap[ny][nx] += 15; // Very high boost in main direction
+            // Skip if adjacent to a sunk ship
+            if (!this.isAdjacentToSunkShip(opponentBoard, nx, ny)) {
+              probabilityMap[ny][nx] += 15; // Very high boost in main direction
+            }
           }
           
           // Extended boost (2 cells away, only in main direction)
@@ -656,11 +765,14 @@ export class BattleshipAI {
           const ny2 = hit.y + 2 * dir.y;
           
           if (this.isValidPosition(nx2, ny2) && !opponentBoard[ny2][nx2].isHit) {
-            // Higher boost if there's a line of hits
-            if (opponentBoard[ny][nx].isHit && opponentBoard[ny][nx].hasShip) {
-              probabilityMap[ny2][nx2] += 20; // Very high boost for continuation
-            } else {
-              probabilityMap[ny2][nx2] += 5; // Moderate boost otherwise
+            // Skip if adjacent to a sunk ship
+            if (!this.isAdjacentToSunkShip(opponentBoard, nx2, ny2)) {
+              // Higher boost if there's a line of hits
+              if (opponentBoard[ny][nx].isHit && opponentBoard[ny][nx].hasShip) {
+                probabilityMap[ny2][nx2] += 20; // Very high boost for continuation
+              } else {
+                probabilityMap[ny2][nx2] += 5; // Moderate boost otherwise
+              }
             }
           }
         }
@@ -672,7 +784,10 @@ export class BattleshipAI {
             const ny = hit.y + dir.y;
             
             if (this.isValidPosition(nx, ny) && !opponentBoard[ny][nx].isHit) {
-              probabilityMap[ny][nx] += 2; // Small boost in cross direction
+              // Skip if adjacent to a sunk ship
+              if (!this.isAdjacentToSunkShip(opponentBoard, nx, ny)) {
+                probabilityMap[ny][nx] += 2; // Small boost in cross direction
+              }
             }
           }
         }
@@ -692,7 +807,10 @@ export class BattleshipAI {
           const ny = hit.y + dir.y;
           
           if (this.isValidPosition(nx, ny) && !opponentBoard[ny][nx].isHit) {
-            probabilityMap[ny][nx] += 5; // Standard boost for adjacent cells
+            // Skip if adjacent to a sunk ship
+            if (!this.isAdjacentToSunkShip(opponentBoard, nx, ny)) {
+              probabilityMap[ny][nx] += 5; // Standard boost for adjacent cells
+            }
           }
         }
       }
@@ -702,43 +820,19 @@ export class BattleshipAI {
     for (let y = 0; y < this.config.boardSize; y++) {
       for (let x = 0; x < this.config.boardSize; x++) {
         if (!opponentBoard[y][x].isHit) {
-          // Boost edge cells
-          if (x === 0 || x === this.config.boardSize - 1 || 
-              y === 0 || y === this.config.boardSize - 1) {
-            probabilityMap[y][x] += 1;
+          // Skip if adjacent to a sunk ship
+          if (!this.isAdjacentToSunkShip(opponentBoard, x, y)) {
+            // Boost edge cells
+            if (x === 0 || x === this.config.boardSize - 1 || 
+                y === 0 || y === this.config.boardSize - 1) {
+              probabilityMap[y][x] += 1;
+            }
           }
         }
       }
     }
     
     return probabilityMap;
-  }
-
-  // Get the remaining ship sizes, excluding already sunk ships
-  private getRemainingShipSizes(): number[] {
-    const allShips = [
-      { type: 'carrier', size: 5 },
-      { type: 'battleship', size: 4 },
-      { type: 'cruiser', size: 3 },
-      { type: 'submarine', size: 3 },
-      { type: 'destroyer', size: 2 }
-    ];
-    
-    return allShips
-      .filter(ship => !this.sunkShips.has(ship.type))
-      .map(ship => ship.size);
-  }
-
-  // Check if a ship can fit at the position (simpler than canPlaceShip)
-  private canFitShip(opponentBoard: Cell[][], x: number, y: number, size: number, isHorizontal: boolean): boolean {
-    for (let i = 0; i < size; i++) {
-      const checkX = isHorizontal ? x + i : x;
-      const checkY = isHorizontal ? y : y + i;
-      
-      if (checkX >= this.config.boardSize || checkY >= this.config.boardSize) return false;
-      if (opponentBoard[checkY][checkX].isHit && !opponentBoard[checkY][checkX].hasShip) return false;
-    }
-    return true;
   }
 
   private findHighestProbabilityMove(probabilityMap: number[][], opponentBoard: Cell[][]): { x: number; y: number } {
@@ -748,6 +842,11 @@ export class BattleshipAI {
     for (let y = 0; y < this.config.boardSize; y++) {
       for (let x = 0; x < this.config.boardSize; x++) {
         if (!opponentBoard[y][x].isHit) {
+          // Skip positions adjacent to sunk ships
+          if (this.isAdjacentToSunkShip(opponentBoard, x, y)) {
+            continue;
+          }
+          
           if (probabilityMap[y][x] > maxProb) {
             maxProb = probabilityMap[y][x];
             bestMoves = [{ x, y }];
@@ -925,7 +1024,7 @@ export class BattleshipAI {
     const centerCells: { x: number; y: number }[] = [];
     for (let y = centerRegion.minY; y <= centerRegion.maxY; y++) {
       for (let x = centerRegion.minX; x <= centerRegion.maxX; x++) {
-        if (!opponentBoard[y][x].isHit) {
+        if (!opponentBoard[y][x].isHit && !this.isAdjacentToSunkShip(opponentBoard, x, y)) {
           centerCells.push({ x, y });
         }
       }
