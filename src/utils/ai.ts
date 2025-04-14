@@ -14,6 +14,21 @@ export const SHIP_SIZES = {
 interface AIConfig {
   difficulty: Difficulty;
   boardSize: number;
+  analysisRadius?: number;
+  probabilityCacheSize?: number;
+  availableSpaceCacheSize?: number;
+  placementPatterns?: {
+    edge: number;
+    center: number;
+    cluster: number;
+  };
+  probabilityBoosts?: {
+    hitChain: number;
+    availableSpace: number;
+    edge: number;
+    corner: number;
+    lineFormation: number;
+  };
 }
 
 export class BattleshipAI {
@@ -26,11 +41,45 @@ export class BattleshipAI {
   private sunkShips: Set<string> = new Set(); // Track which ship types have been sunk
   private parityHunting: boolean = true; // Track if we're in parity hunting phase
   private parity: number = 0; // 0 or 1, representing the parity we're hunting on
+  private probabilityCache: Map<string, number[][]> = new Map();
+  private lastProbabilityMap: number[][] | null = null;
+  private lastBoardState: string | null = null;
+  private cachedAvailableSpaces: Map<string, number> = new Map();
+  private analysisRadius: number;
+  private placementPatterns: { type: string; weight: number }[];
+  private probabilityBoosts: {
+    hitChain: number;
+    availableSpace: number;
+    edge: number;
+    corner: number;
+    lineFormation: number;
+  };
 
   constructor(config: AIConfig) {
-    this.config = config;
+    this.config = {
+      ...config,
+      analysisRadius: config.analysisRadius ?? 3,
+      probabilityCacheSize: config.probabilityCacheSize ?? 100,
+      availableSpaceCacheSize: config.availableSpaceCacheSize ?? 1000,
+      placementPatterns: config.placementPatterns ?? {
+        edge: 0.4,
+        center: 0.3,
+        cluster: 0.3
+      },
+      probabilityBoosts: config.probabilityBoosts ?? {
+        hitChain: 15,
+        availableSpace: 5,
+        edge: 1,
+        corner: 1,
+        lineFormation: 10
+      }
+    };
+    
+    this.analysisRadius = this.config.analysisRadius!;
+    this.placementPatterns = Object.entries(this.config.placementPatterns!).map(([type, weight]) => ({ type, weight }));
+    this.probabilityBoosts = this.config.probabilityBoosts!;
+    
     this.initializeBoard();
-    // Randomly choose initial parity (but stick with it)
     this.parity = Math.random() < 0.5 ? 0 : 1;
   }
 
@@ -134,64 +183,95 @@ export class BattleshipAI {
   private placeShipsStrategically(ships: Omit<Ship, 'id' | 'placed'>[]): Cell[][] {
     const board = this.createEmptyBoard();
     
-    // Start with placing larger ships near edges but not exactly at edges
-    const largeShips = [...ships].sort((a, b) => b.size - a.size);
+    // Sort ships by size (largest first)
+    const sortedShips = [...ships].sort((a, b) => b.size - a.size);
     
-    // Öka antal försök för att hantera mer begränsande regler
-    const maxAttemptsPerShip = 500; 
+    // Define placement patterns
+    const patterns = [
+      { type: 'edge', weight: 0.4 },
+      { type: 'center', weight: 0.3 },
+      { type: 'cluster', weight: 0.3 }
+    ];
     
-    for (const ship of largeShips) {
+    // Track placed ships for clustering
+    const placedShips: { x: number; y: number; size: number; isHorizontal: boolean }[] = [];
+    
+    for (const ship of sortedShips) {
       let placed = false;
       let attempts = 0;
+      const maxAttempts = 500;
       
-      while (!placed && attempts < maxAttemptsPerShip) {
+      while (!placed && attempts < maxAttempts) {
         attempts++;
         
-        // Bias toward edges but not corners
-        let isHorizontal = Math.random() > 0.5;
-        let x, y;
+        // Choose placement pattern based on weights
+        const pattern = this.choosePattern(patterns);
         
-        if (Math.random() > 0.7) {
-          // Place near edges
-          if (isHorizontal) {
-            // Avoid placing horizontally at the very edge
-            x = 1 + Math.floor(Math.random() * (this.config.boardSize - ship.size - 2));
-            // But bias toward top or bottom
-            y = Math.random() > 0.5 ? 1 : this.config.boardSize - 2;
-          } else {
-            // Vertical placement near left or right edge
-            x = Math.random() > 0.5 ? 1 : this.config.boardSize - 2;
-            y = 1 + Math.floor(Math.random() * (this.config.boardSize - ship.size - 2));
-          }
-        } else {
-          // Otherwise place somewhat randomly but avoid corners
-          x = 1 + Math.floor(Math.random() * (this.config.boardSize - ship.size - 2));
-          y = 1 + Math.floor(Math.random() * (this.config.boardSize - ship.size - 2));
-          
-          // Try to avoid placing ships parallel to each other
-          const existingShipDirection = this.detectExistingShipDirection(board);
-          if (existingShipDirection === 'horizontal') {
-            isHorizontal = Math.random() > 0.7; // Bias toward vertical
-          } else if (existingShipDirection === 'vertical') {
-            isHorizontal = Math.random() < 0.7; // Bias toward horizontal
-          }
+        let x, y, isHorizontal;
+        
+        switch (pattern) {
+          case 'edge':
+            // Place near edges but not exactly at edges
+            isHorizontal = Math.random() > 0.5;
+            if (isHorizontal) {
+              x = 1 + Math.floor(Math.random() * (this.config.boardSize - ship.size - 2));
+              y = Math.random() > 0.5 ? 1 : this.config.boardSize - 2;
+            } else {
+              x = Math.random() > 0.5 ? 1 : this.config.boardSize - 2;
+              y = 1 + Math.floor(Math.random() * (this.config.boardSize - ship.size - 2));
+            }
+            break;
+            
+          case 'center':
+            // Place in center region
+            isHorizontal = Math.random() > 0.5;
+            const centerRegion = {
+              minX: Math.floor(this.config.boardSize * 0.3),
+              maxX: Math.floor(this.config.boardSize * 0.7),
+              minY: Math.floor(this.config.boardSize * 0.3),
+              maxY: Math.floor(this.config.boardSize * 0.7)
+            };
+            x = centerRegion.minX + Math.floor(Math.random() * (centerRegion.maxX - centerRegion.minX - ship.size + 1));
+            y = centerRegion.minY + Math.floor(Math.random() * (centerRegion.maxY - centerRegion.minY - ship.size + 1));
+            break;
+            
+          case 'cluster':
+            // Try to place near existing ships
+            if (placedShips.length > 0) {
+              const referenceShip = placedShips[Math.floor(Math.random() * placedShips.length)];
+              isHorizontal = Math.random() > 0.5;
+              
+              // Place within 2 cells of reference ship
+              const offset = Math.floor(Math.random() * 3) - 1; // -1, 0, or 1
+              if (isHorizontal) {
+                x = referenceShip.x + offset;
+                y = referenceShip.y + (Math.random() > 0.5 ? 1 : -1);
+              } else {
+                x = referenceShip.x + (Math.random() > 0.5 ? 1 : -1);
+                y = referenceShip.y + offset;
+              }
+            } else {
+              // If no ships placed yet, fall back to edge placement
+              isHorizontal = Math.random() > 0.5;
+              x = 1 + Math.floor(Math.random() * (this.config.boardSize - ship.size - 2));
+              y = Math.random() > 0.5 ? 1 : this.config.boardSize - 2;
+            }
+            break;
         }
         
         if (this.canPlaceShip(board, x, y, ship.size, isHorizontal)) {
           this.placeShip(board, x, y, ship.size, isHorizontal, ship.type);
+          placedShips.push({ x, y, size: ship.size, isHorizontal });
           placed = true;
         }
       }
       
-      // Om vi inte kunde placera skeppet strategiskt, försök med enklare regler
       if (!placed) {
         console.warn(`Could not place ship ${ship.type} strategically, trying with simplified rules`);
+        // Fall back to simplified placement
         attempts = 0;
-        
-        // Försök med enklare placeringsregler (tillåt intill-placering)
-        while (!placed && attempts < maxAttemptsPerShip) {
+        while (!placed && attempts < maxAttempts) {
           attempts++;
-          
           const isHorizontal = Math.random() > 0.5;
           const x = Math.floor(Math.random() * (this.config.boardSize - (isHorizontal ? ship.size : 0)));
           const y = Math.floor(Math.random() * (this.config.boardSize - (isHorizontal ? 0 : ship.size)));
@@ -201,15 +281,24 @@ export class BattleshipAI {
             placed = true;
           }
         }
-        
-        if (!placed) {
-          console.error(`Failed to place ship ${ship.type} even with simplified rules`);
-          // Fortsätt ändå - nästa skepp kanske kan placeras
-        }
       }
     }
     
     return board;
+  }
+
+  private choosePattern(patterns: { type: string; weight: number }[]): string {
+    const totalWeight = patterns.reduce((sum, p) => sum + p.weight, 0);
+    let random = Math.random() * totalWeight;
+    
+    for (const pattern of patterns) {
+      if (random < pattern.weight) {
+        return pattern.type;
+      }
+      random -= pattern.weight;
+    }
+    
+    return patterns[0].type; // Fallback
   }
 
   // Detect if existing ships have a dominant orientation
@@ -504,7 +593,13 @@ export class BattleshipAI {
         { x: 0, y: -1 }  // Up
       ];
       
-      for (const dir of directions) {
+      // Sort directions by available space
+      const sortedDirections = directions.map(dir => ({
+        dir,
+        space: this.calculateAvailableSpace(opponentBoard, this.hitChain[0].x, this.hitChain[0].y, dir)
+      })).sort((a, b) => b.space - a.space);
+      
+      for (const { dir } of sortedDirections) {
         const x = this.hitChain[0].x + dir.x;
         const y = this.hitChain[0].y + dir.y;
         
@@ -648,6 +743,10 @@ export class BattleshipAI {
     this.hitDirection = null;
     this.lastHit = null;
     this.potentialTargets = [];
+    this.probabilityCache.clear();
+    this.cachedAvailableSpaces.clear();
+    this.lastProbabilityMap = null;
+    this.lastBoardState = null;
   }
   
   // Mark a ship as sunk
@@ -888,43 +987,77 @@ export class BattleshipAI {
     return true;
   }
 
+  private getBoardStateKey(opponentBoard: Cell[][]): string {
+    // Enhanced board state key that includes more relevant information
+    let key = '';
+    for (let y = 0; y < this.config.boardSize; y++) {
+      for (let x = 0; x < this.config.boardSize; x++) {
+        const cell = opponentBoard[y][x];
+        key += cell.isHit ? (cell.hasShip ? 'H' : 'M') : 'U';
+      }
+    }
+    
+    // Include hit chain with direction information
+    key += `|${this.hitChain.map(h => `${h.x},${h.y}`).join(';')}`;
+    key += `|${this.hitDirection || 'N'}`;
+    
+    // Include sunk ships and remaining ship sizes
+    key += `|${Array.from(this.sunkShips).join(',')}`;
+    key += `|${this.getRemainingShipSizes().join(',')}`;
+    
+    // Include parity information
+    key += `|${this.parityHunting ? 'P' : 'N'}`;
+    key += `|${this.parity}`;
+    
+    return key;
+  }
+
   private createProbabilityMap(opponentBoard: Cell[][]): number[][] {
+    const boardStateKey = this.getBoardStateKey(opponentBoard);
+    
+    // Check cache first
+    if (this.probabilityCache.has(boardStateKey)) {
+      return this.probabilityCache.get(boardStateKey)!;
+    }
+    
+    // If board state hasn't changed much, reuse last probability map
+    if (this.lastBoardState && 
+        this.lastProbabilityMap && 
+        this.boardsAreSimilar(this.lastBoardState, boardStateKey)) {
+      return this.lastProbabilityMap;
+    }
+    
     const probabilityMap = Array(this.config.boardSize).fill(0).map(() => 
       Array(this.config.boardSize).fill(0)
     );
     
-    // Get the remaining ship sizes (exclude sunk ships)
+    // Get the remaining ship sizes
     const remainingShips = this.getRemainingShipSizes();
     
-    // Normal probability calculation
-    for (let y = 0; y < this.config.boardSize; y++) {
-      for (let x = 0; x < this.config.boardSize; x++) {
-        if (!opponentBoard[y][x].isHit) {
-          // Skip cells adjacent to sunk ships since they can't contain ships
-          if (this.isAdjacentToSunkShip(opponentBoard, x, y)) {
-            probabilityMap[y][x] = 0;
-            continue;
-          }
-          
-          // Check horizontal possibilities for each remaining ship size
-          for (const size of remainingShips) {
-            if (this.canFitShip(opponentBoard, x, y, size, true)) {
-              for (let i = 0; i < size; i++) {
-                if (x + i < this.config.boardSize) {
-                  probabilityMap[y][x + i]++;
-                }
-              }
+    // Determine analysis area
+    const analysisArea = this.getAnalysisArea(opponentBoard);
+    
+    // Enhanced probability calculation using all possible placements
+    for (const shipSize of remainingShips) {
+      // Horizontal placements
+      for (let y = analysisArea.minY; y <= analysisArea.maxY; y++) {
+        for (let x = analysisArea.minX; x <= analysisArea.maxX - shipSize; x++) {
+          if (this.canFitShip(opponentBoard, x, y, shipSize, true)) {
+            const weight = shipSize * 2;
+            for (let i = 0; i < shipSize; i++) {
+              probabilityMap[y][x + i] += weight;
             }
           }
-          
-          // Check vertical possibilities for each remaining ship size
-          for (const size of remainingShips) {
-            if (this.canFitShip(opponentBoard, x, y, size, false)) {
-              for (let i = 0; i < size; i++) {
-                if (y + i < this.config.boardSize) {
-                  probabilityMap[y + i][x]++;
-                }
-              }
+        }
+      }
+      
+      // Vertical placements
+      for (let x = analysisArea.minX; x <= analysisArea.maxX; x++) {
+        for (let y = analysisArea.minY; y <= analysisArea.maxY - shipSize; y++) {
+          if (this.canFitShip(opponentBoard, x, y, shipSize, false)) {
+            const weight = shipSize * 2;
+            for (let i = 0; i < shipSize; i++) {
+              probabilityMap[y + i][x] += weight;
             }
           }
         }
@@ -933,102 +1066,208 @@ export class BattleshipAI {
     
     // Enhanced directional boosting for hit chains
     if (this.hitChain.length >= 2 && this.hitDirection) {
-      // Apply stronger boost in the known direction
       const mainDirection = this.hitDirection === 'horizontal' 
           ? [{ x: 1, y: 0 }, { x: -1, y: 0 }]
           : [{ x: 0, y: 1 }, { x: 0, y: -1 }];
           
-      // Cross direction (perpendicular to main direction)
       const crossDirection = this.hitDirection === 'horizontal'
           ? [{ x: 0, y: 1 }, { x: 0, y: -1 }]
           : [{ x: 1, y: 0 }, { x: -1, y: 0 }];
       
       for (const hit of this.hitChain) {
-        // Strong boost along the chain's direction (15)
         for (const dir of mainDirection) {
           const nx = hit.x + dir.x;
           const ny = hit.y + dir.y;
           
           if (this.isValidPosition(nx, ny) && !opponentBoard[ny][nx].isHit) {
-            // Skip if adjacent to a sunk ship
             if (!this.isAdjacentToSunkShip(opponentBoard, nx, ny)) {
-              probabilityMap[ny][nx] += 15; // Very high boost in main direction
+              const availableSpace = this.getCachedAvailableSpace(opponentBoard, nx, ny, dir);
+              probabilityMap[ny][nx] += this.probabilityBoosts.hitChain + 
+                                      (availableSpace * this.probabilityBoosts.availableSpace);
             }
           }
           
-          // Extended boost (2 cells away, only in main direction)
           const nx2 = hit.x + 2 * dir.x;
           const ny2 = hit.y + 2 * dir.y;
           
           if (this.isValidPosition(nx2, ny2) && !opponentBoard[ny2][nx2].isHit) {
-            // Skip if adjacent to a sunk ship
             if (!this.isAdjacentToSunkShip(opponentBoard, nx2, ny2)) {
-              // Higher boost if there's a line of hits
               if (opponentBoard[ny][nx].isHit && opponentBoard[ny][nx].hasShip) {
-                probabilityMap[ny2][nx2] += 20; // Very high boost for continuation
+                probabilityMap[ny2][nx2] += this.probabilityBoosts.lineFormation;
               } else {
-                probabilityMap[ny2][nx2] += 5; // Moderate boost otherwise
+                probabilityMap[ny2][nx2] += this.probabilityBoosts.hitChain / 3;
               }
             }
           }
         }
         
-        // Minimal boost perpendicular to chain (only if no other hits)
-        if (this.hitChain.length <= 2) { // Only for early in the chain
+        if (this.hitChain.length <= 2) {
           for (const dir of crossDirection) {
             const nx = hit.x + dir.x;
             const ny = hit.y + dir.y;
             
             if (this.isValidPosition(nx, ny) && !opponentBoard[ny][nx].isHit) {
-              // Skip if adjacent to a sunk ship
               if (!this.isAdjacentToSunkShip(opponentBoard, nx, ny)) {
-                probabilityMap[ny][nx] += 2; // Small boost in cross direction
+                probabilityMap[ny][nx] += this.probabilityBoosts.hitChain / 5;
               }
             }
           }
         }
       }
-    } else {
-      // Without a known direction, use standard boost around hits
-      for (const hit of this.hitChain) {
-        const directions = [
-          { x: 1, y: 0 },
-          { x: -1, y: 0 },
-          { x: 0, y: 1 },
-          { x: 0, y: -1 }
-        ];
-        
-        for (const dir of directions) {
-          const nx = hit.x + dir.x;
-          const ny = hit.y + dir.y;
-          
-          if (this.isValidPosition(nx, ny) && !opponentBoard[ny][nx].isHit) {
-            // Skip if adjacent to a sunk ship
-            if (!this.isAdjacentToSunkShip(opponentBoard, nx, ny)) {
-              probabilityMap[ny][nx] += 5; // Standard boost for adjacent cells
-            }
+    }
+    
+    // Adaptive parity based on remaining ships
+    if (this.parityHunting) {
+      const remainingShips = this.getRemainingShipSizes();
+      const allOddSized = remainingShips.every(size => size % 2 === 1);
+      const allEvenSized = remainingShips.every(size => size % 2 === 0);
+      
+      if (allOddSized) {
+        this.parity = 1;
+      } else if (allEvenSized) {
+        this.parity = 0;
+      }
+      
+      for (let y = analysisArea.minY; y <= analysisArea.maxY; y++) {
+        for (let x = analysisArea.minX; x <= analysisArea.maxX; x++) {
+          if ((x + y) % 2 !== this.parity) {
+            probabilityMap[y][x] = 0;
           }
         }
       }
     }
     
-    // Small boost for cells near edges
-    for (let y = 0; y < this.config.boardSize; y++) {
-      for (let x = 0; x < this.config.boardSize; x++) {
-        if (!opponentBoard[y][x].isHit) {
-          // Skip if adjacent to a sunk ship
-          if (!this.isAdjacentToSunkShip(opponentBoard, x, y)) {
-            // Boost edge cells
-            if (x === 0 || x === this.config.boardSize - 1 || 
-                y === 0 || y === this.config.boardSize - 1) {
-              probabilityMap[y][x] += 1;
-            }
-          }
-        }
-      }
+    // Cache the result
+    this.probabilityCache.set(boardStateKey, probabilityMap);
+    this.lastProbabilityMap = probabilityMap;
+    this.lastBoardState = boardStateKey;
+    
+    // Clean up old cache entries if needed
+    if (this.probabilityCache.size > this.config.probabilityCacheSize!) {
+      this.probabilityCache.clear();
     }
     
     return probabilityMap;
+  }
+
+  private getAnalysisArea(opponentBoard: Cell[][]): { minX: number; maxX: number; minY: number; maxY: number } {
+    // If no hits, analyze the whole board
+    if (this.hitChain.length === 0) {
+      return {
+        minX: 0,
+        maxX: this.config.boardSize - 1,
+        minY: 0,
+        maxY: this.config.boardSize - 1
+      };
+    }
+    
+    // Calculate initial area around hits
+    let minX = this.config.boardSize;
+    let maxX = -1;
+    let minY = this.config.boardSize;
+    let maxY = -1;
+    
+    // Consider all hits in the chain
+    for (const hit of this.hitChain) {
+      minX = Math.min(minX, hit.x - this.analysisRadius);
+      maxX = Math.max(maxX, hit.x + this.analysisRadius);
+      minY = Math.min(minY, hit.y - this.analysisRadius);
+      maxY = Math.max(maxY, hit.y + this.analysisRadius);
+    }
+    
+    // Expand area based on largest remaining ship
+    const largestShip = Math.max(...this.getRemainingShipSizes());
+    minX = Math.max(0, minX - largestShip);
+    maxX = Math.min(this.config.boardSize - 1, maxX + largestShip);
+    minY = Math.max(0, minY - largestShip);
+    maxY = Math.min(this.config.boardSize - 1, maxY + largestShip);
+    
+    // Ensure the area is at least large enough for the largest ship
+    const width = maxX - minX + 1;
+    const height = maxY - minY + 1;
+    if (width < largestShip || height < largestShip) {
+      // Expand the area to ensure it can fit the largest ship
+      const centerX = Math.floor((minX + maxX) / 2);
+      const centerY = Math.floor((minY + maxY) / 2);
+      const expansion = Math.max(largestShip - width, largestShip - height);
+      
+      minX = Math.max(0, centerX - Math.floor(expansion / 2));
+      maxX = Math.min(this.config.boardSize - 1, centerX + Math.ceil(expansion / 2));
+      minY = Math.max(0, centerY - Math.floor(expansion / 2));
+      maxY = Math.min(this.config.boardSize - 1, centerY + Math.ceil(expansion / 2));
+    }
+    
+    return { minX, maxX, minY, maxY };
+  }
+
+  private boardsAreSimilar(oldKey: string, newKey: string): boolean {
+    // Split keys into components
+    const [oldPattern, oldHits, oldDirection, oldSunk, oldSizes, oldParityHunt, oldParity] = oldKey.split('|');
+    const [newPattern, newHits, newDirection, newSunk, newSizes, newParityHunt, newParity] = newKey.split('|');
+    
+    // Check if critical components have changed
+    if (oldDirection !== newDirection || 
+        oldParityHunt !== newParityHunt || 
+        oldParity !== newParity) {
+      return false;
+    }
+    
+    // Check if sunk ships have changed
+    if (oldSunk !== newSunk) {
+      return false;
+    }
+    
+    // Check if remaining ship sizes have changed
+    if (oldSizes !== newSizes) {
+      return false;
+    }
+    
+    // Allow for up to 3 cell differences in the pattern
+    let differences = 0;
+    for (let i = 0; i < oldPattern.length; i++) {
+      if (oldPattern[i] !== newPattern[i]) {
+        differences++;
+        if (differences > 3) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+
+  private getCachedAvailableSpace(opponentBoard: Cell[][], x: number, y: number, dir: { x: number; y: number }): number {
+    const cacheKey = `${x},${y},${dir.x},${dir.y}`;
+    
+    if (this.cachedAvailableSpaces.has(cacheKey)) {
+      return this.cachedAvailableSpaces.get(cacheKey)!;
+    }
+    
+    const space = this.calculateAvailableSpace(opponentBoard, x, y, dir);
+    this.cachedAvailableSpaces.set(cacheKey, space);
+    
+    // Clean up old cache entries if needed
+    if (this.cachedAvailableSpaces.size > this.config.availableSpaceCacheSize!) {
+      this.cachedAvailableSpaces.clear();
+    }
+    
+    return space;
+  }
+
+  private calculateAvailableSpace(opponentBoard: Cell[][], x: number, y: number, dir: { x: number; y: number }): number {
+    let space = 0;
+    let nx = x;
+    let ny = y;
+    
+    while (this.isValidPosition(nx, ny) && 
+           !opponentBoard[ny][nx].isHit && 
+           !this.isAdjacentToSunkShip(opponentBoard, nx, ny)) {
+      space++;
+      nx += dir.x;
+      ny += dir.y;
+    }
+    
+    return space;
   }
 
   // Expose AI internal state for debugging
