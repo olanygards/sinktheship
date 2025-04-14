@@ -24,10 +24,14 @@ export class BattleshipAI {
   private board: Cell[][] = [];
   private hitChain: { x: number; y: number }[] = []; // Track consecutive hits
   private sunkShips: Set<string> = new Set(); // Track which ship types have been sunk
+  private parityHunting: boolean = true; // Track if we're in parity hunting phase
+  private parity: number = 0; // 0 or 1, representing the parity we're hunting on
 
   constructor(config: AIConfig) {
     this.config = config;
     this.initializeBoard();
+    // Randomly choose initial parity (but stick with it)
+    this.parity = Math.random() < 0.5 ? 0 : 1;
   }
 
   private initializeBoard() {
@@ -289,12 +293,9 @@ export class BattleshipAI {
   }
 
   public makeMove(opponentBoard: Cell[][]): { x: number; y: number } {
-    // For hard mode's first few moves, bias slightly toward center
-    if (this.config.difficulty === 'hard' && 
-        this.countHits(opponentBoard) < 5 && 
-        Math.random() < 0.35) {
-      // Get a move biased toward the center portion of the board
-      return this.makeCenterBiasedMove(opponentBoard);
+    // For hard difficulty, use the optimized strategy
+    if (this.config.difficulty === 'hard') {
+      return this.makeAdvancedMove(opponentBoard);
     }
     
     switch (this.config.difficulty) {
@@ -302,8 +303,6 @@ export class BattleshipAI {
         return this.makeRandomMove(opponentBoard);
       case 'medium':
         return this.makeSmartMove(opponentBoard);
-      case 'hard':
-        return this.makeAdvancedMove(opponentBoard);
       default:
         return this.makeRandomMove(opponentBoard);
     }
@@ -315,8 +314,9 @@ export class BattleshipAI {
     for (let y = 0; y < this.config.boardSize; y++) {
       for (let x = 0; x < this.config.boardSize; x++) {
         if (!opponentBoard[y][x].isHit) {
-          // For hard difficulty, skip cells adjacent to sunk ships
-          if (this.config.difficulty === 'hard' && this.isAdjacentToSunkShip(opponentBoard, x, y)) {
+          // Skip cells adjacent to sunk ships and isolated cells
+          if (this.isAdjacentToSunkShip(opponentBoard, x, y) || 
+              this.isIsolatedCell(x, y, opponentBoard)) {
             continue;
           }
           availableMoves.push({ x, y });
@@ -329,7 +329,10 @@ export class BattleshipAI {
       for (let y = 0; y < this.config.boardSize; y++) {
         for (let x = 0; x < this.config.boardSize; x++) {
           if (!opponentBoard[y][x].isHit) {
-            availableMoves.push({ x, y });
+            // Even in fallback, skip isolated cells
+            if (!this.isIsolatedCell(x, y, opponentBoard)) {
+              availableMoves.push({ x, y });
+            }
           }
         }
       }
@@ -360,10 +363,11 @@ export class BattleshipAI {
         y: lastInChain.y + (this.hitDirection === 'vertical' ? Math.sign(dy) : 0)
       };
       
-      // Check if next position is valid, not already hit, and not adjacent to a sunk ship
+      // Check if next position is valid, not already hit, not adjacent to sunk ships, and not isolated
       if (this.isValidPosition(nextForward.x, nextForward.y) && 
           !opponentBoard[nextForward.y][nextForward.x].isHit &&
-          (this.config.difficulty !== 'hard' || !this.isAdjacentToSunkShip(opponentBoard, nextForward.x, nextForward.y))) {
+          !this.isAdjacentToSunkShip(opponentBoard, nextForward.x, nextForward.y) &&
+          !this.isIsolatedCell(nextForward.x, nextForward.y, opponentBoard)) {
         return nextForward;
       }
       
@@ -375,7 +379,8 @@ export class BattleshipAI {
       
       if (this.isValidPosition(nextBackward.x, nextBackward.y) && 
           !opponentBoard[nextBackward.y][nextBackward.x].isHit &&
-          (this.config.difficulty !== 'hard' || !this.isAdjacentToSunkShip(opponentBoard, nextBackward.x, nextBackward.y))) {
+          !this.isAdjacentToSunkShip(opponentBoard, nextBackward.x, nextBackward.y) &&
+          !this.isIsolatedCell(nextBackward.x, nextBackward.y, opponentBoard)) {
         return nextBackward;
       }
       
@@ -403,30 +408,15 @@ export class BattleshipAI {
         const y = this.hitChain[0].y + dir.y;
         
         if (this.isValidPosition(x, y) && !opponentBoard[y][x].isHit &&
-            (this.config.difficulty !== 'hard' || !this.isAdjacentToSunkShip(opponentBoard, x, y))) {
+            !this.isAdjacentToSunkShip(opponentBoard, x, y) &&
+            !this.isIsolatedCell(x, y, opponentBoard)) {
           return { x, y };
         }
       }
     }
     
     // If no hit chain or all targeted positions are invalid, make a random move
-    if (this.config.difficulty === 'hard') {
-      // For hard difficulty, use the probabilistic approach to pick a random move
-      const availableMoves: { x: number; y: number }[] = [];
-      
-      for (let y = 0; y < this.config.boardSize; y++) {
-        for (let x = 0; x < this.config.boardSize; x++) {
-          if (!opponentBoard[y][x].isHit && !this.isAdjacentToSunkShip(opponentBoard, x, y)) {
-            availableMoves.push({ x, y });
-          }
-        }
-      }
-      
-      return availableMoves[Math.floor(Math.random() * availableMoves.length)];
-    } else {
-      // For medium difficulty, just make a random move
-      return this.makeRandomMove(opponentBoard);
-    }
+    return this.makeRandomMove(opponentBoard);
   }
 
   private isValidPosition(x: number, y: number): boolean {
@@ -434,67 +424,273 @@ export class BattleshipAI {
   }
 
   private makeAdvancedMove(opponentBoard: Cell[][]): { x: number; y: number } {
-    // First, check if we have a hit chain to follow (prioritize ongoing ship targeting)
+    // If we have a hit chain, prioritize targeting
     if (this.hitChain.length >= 1) {
-      // Use the same smart logic as medium difficulty, but with better heuristics
-      const smartMove = this.makeSmartMove(opponentBoard);
-      
-      // If the smart move is valid, 80% chance to use it
-      // This adds some unpredictability for hard mode
-      if (Math.random() < 0.8) {
-        return smartMove;
+      // Use deterministic targeting logic
+      const targetingMove = this.makeDeterministicTargetingMove(opponentBoard);
+      if (targetingMove) {
+        return targetingMove;
       }
     }
-    
-    // If we have potential targets from previous logic, try them first
-    if (this.potentialTargets.length > 0) {
-      // Sort potential targets by probability
-      this.potentialTargets.sort((a, b) => {
-        const aVal = this.calculatePositionValue(a.x, a.y, opponentBoard);
-        const bVal = this.calculatePositionValue(b.x, b.y, opponentBoard);
-        return bVal - aVal; // Higher value first
-      });
-      
-      // Filter out isolated single cells that can't fit any remaining ship
-      const filteredTargets = this.potentialTargets.filter(target => 
-        !this.isIsolatedCell(target.x, target.y, opponentBoard)
-      );
-      
-      // If we have filtered targets, use them; otherwise fall back to the original list
-      const targets = filteredTargets.length > 0 ? filteredTargets : this.potentialTargets;
-      
-      // Use weighted random selection for top targets
-      if (targets.length > 3) {
-        // Take top 3 candidates
-        const topCandidates = targets.slice(0, 3);
-        const weights = [0.6, 0.3, 0.1]; // 60% chance for best, 30% for second, 10% for third
-        
-        const randomValue = Math.random();
-        if (randomValue < weights[0]) {
-          return topCandidates[0];
-        } else if (randomValue < weights[0] + weights[1]) {
-          return topCandidates[1];
-        } else {
-          return topCandidates[2];
-        }
-      }
-      
-      return targets.shift()!;
-    }
-    
-    // Use enhanced probability density to find likely ship locations
+
+    // If no targeting move available, use probability map with parity hunting
     const probabilityMap = this.createProbabilityMap(opponentBoard);
     
-    // Filter out isolated cells
-    for (let y = 0; y < this.config.boardSize; y++) {
-      for (let x = 0; x < this.config.boardSize; x++) {
-        if (!opponentBoard[y][x].isHit && this.isIsolatedCell(x, y, opponentBoard)) {
-          probabilityMap[y][x] = 0; // Zero out isolated cells
+    // During parity hunting phase, only consider cells of the chosen parity
+    if (this.parityHunting) {
+      for (let y = 0; y < this.config.boardSize; y++) {
+        for (let x = 0; x < this.config.boardSize; x++) {
+          if ((x + y) % 2 !== this.parity) {
+            probabilityMap[y][x] = 0;
+          }
         }
       }
     }
     
     return this.findHighestProbabilityMove(probabilityMap, opponentBoard);
+  }
+
+  private makeDeterministicTargetingMove(opponentBoard: Cell[][]): { x: number; y: number } | null {
+    // If we have multiple hits, follow the direction
+    if (this.hitChain.length >= 2 && this.hitDirection) {
+      const first = this.hitChain[0];
+      const last = this.hitChain[this.hitChain.length - 1];
+      
+      // Try continuing in the same direction from the last hit
+      const nextForward = {
+        x: last.x + (this.hitDirection === 'horizontal' ? Math.sign(last.x - first.x) : 0),
+        y: last.y + (this.hitDirection === 'vertical' ? Math.sign(last.y - first.y) : 0)
+      };
+      
+      if (this.isValidPosition(nextForward.x, nextForward.y) && 
+          !opponentBoard[nextForward.y][nextForward.x].isHit &&
+          !this.isAdjacentToSunkShip(opponentBoard, nextForward.x, nextForward.y) &&
+          !this.isIsolatedCell(nextForward.x, nextForward.y, opponentBoard)) {
+        return nextForward;
+      }
+      
+      // If forward direction is blocked, try the opposite direction from the first hit
+      const nextBackward = {
+        x: first.x - (this.hitDirection === 'horizontal' ? Math.sign(last.x - first.x) : 0),
+        y: first.y - (this.hitDirection === 'vertical' ? Math.sign(last.y - first.y) : 0)
+      };
+      
+      if (this.isValidPosition(nextBackward.x, nextBackward.y) && 
+          !opponentBoard[nextBackward.y][nextBackward.x].isHit &&
+          !this.isAdjacentToSunkShip(opponentBoard, nextBackward.x, nextBackward.y) &&
+          !this.isIsolatedCell(nextBackward.x, nextBackward.y, opponentBoard)) {
+        return nextBackward;
+      }
+      
+      // If both ends are blocked, check perpendicular cells
+      const perpendicularMoves = this.getPerpendicularMoves(opponentBoard);
+      if (perpendicularMoves.length > 0) {
+        // Sort by probability value and return the best one
+        perpendicularMoves.sort((a, b) => {
+          const aVal = this.calculatePositionValue(a.x, a.y, opponentBoard);
+          const bVal = this.calculatePositionValue(b.x, b.y, opponentBoard);
+          return bVal - aVal;
+        });
+        return perpendicularMoves[0];
+      }
+    }
+    
+    // If we have a single hit, try adjacent cells in a deterministic order
+    if (this.hitChain.length === 1) {
+      const directions = [
+        { x: 1, y: 0 },  // Right
+        { x: -1, y: 0 }, // Left
+        { x: 0, y: 1 },  // Down
+        { x: 0, y: -1 }  // Up
+      ];
+      
+      for (const dir of directions) {
+        const x = this.hitChain[0].x + dir.x;
+        const y = this.hitChain[0].y + dir.y;
+        
+        if (this.isValidPosition(x, y) && !opponentBoard[y][x].isHit &&
+            !this.isAdjacentToSunkShip(opponentBoard, x, y) &&
+            !this.isIsolatedCell(x, y, opponentBoard)) {
+          return { x, y };
+        }
+      }
+    }
+    
+    return null; // No targeting move available
+  }
+
+  private getPerpendicularMoves(opponentBoard: Cell[][]): { x: number; y: number }[] {
+    const moves: { x: number; y: number }[] = [];
+    
+    if (this.hitDirection === 'horizontal') {
+      // Check cells above and below each hit
+      for (const hit of this.hitChain) {
+        const up = { x: hit.x, y: hit.y - 1 };
+        const down = { x: hit.x, y: hit.y + 1 };
+        
+        if (this.isValidPosition(up.x, up.y) && !opponentBoard[up.y][up.x].isHit &&
+            !this.isAdjacentToSunkShip(opponentBoard, up.x, up.y) &&
+            !this.isIsolatedCell(up.x, up.y, opponentBoard)) {
+          moves.push(up);
+        }
+        
+        if (this.isValidPosition(down.x, down.y) && !opponentBoard[down.y][down.x].isHit &&
+            !this.isAdjacentToSunkShip(opponentBoard, down.x, down.y) &&
+            !this.isIsolatedCell(down.x, down.y, opponentBoard)) {
+          moves.push(down);
+        }
+      }
+    } else if (this.hitDirection === 'vertical') {
+      // Check cells left and right of each hit
+      for (const hit of this.hitChain) {
+        const left = { x: hit.x - 1, y: hit.y };
+        const right = { x: hit.x + 1, y: hit.y };
+        
+        if (this.isValidPosition(left.x, left.y) && !opponentBoard[left.y][left.x].isHit &&
+            !this.isAdjacentToSunkShip(opponentBoard, left.x, left.y) &&
+            !this.isIsolatedCell(left.x, left.y, opponentBoard)) {
+          moves.push(left);
+        }
+        
+        if (this.isValidPosition(right.x, right.y) && !opponentBoard[right.y][right.x].isHit &&
+            !this.isAdjacentToSunkShip(opponentBoard, right.x, right.y) &&
+            !this.isIsolatedCell(right.x, right.y, opponentBoard)) {
+          moves.push(right);
+        }
+      }
+    }
+    
+    return moves;
+  }
+
+  private findHighestProbabilityMove(probabilityMap: number[][], opponentBoard: Cell[][]): { x: number; y: number } {
+    let maxProb = -1;
+    let bestMoves: { x: number; y: number }[] = [];
+    
+    for (let y = 0; y < this.config.boardSize; y++) {
+      for (let x = 0; x < this.config.boardSize; x++) {
+        if (!opponentBoard[y][x].isHit) {
+          // Skip positions adjacent to sunk ships and isolated cells
+          if (this.isAdjacentToSunkShip(opponentBoard, x, y) || 
+              this.isIsolatedCell(x, y, opponentBoard)) {
+            continue;
+          }
+          
+          if (probabilityMap[y][x] > maxProb) {
+            maxProb = probabilityMap[y][x];
+            bestMoves = [{ x, y }];
+          } else if (probabilityMap[y][x] === maxProb) {
+            bestMoves.push({ x, y });
+          }
+        }
+      }
+    }
+    
+    // If we have multiple best moves, use deterministic tie-breaking
+    if (bestMoves.length > 1) {
+      // First tie-breaker: position value
+      bestMoves.sort((a, b) => {
+        const aValue = this.calculatePositionValue(a.x, a.y, opponentBoard);
+        const bValue = this.calculatePositionValue(b.x, b.y, opponentBoard);
+        if (aValue !== bValue) {
+          return bValue - aValue;
+        }
+        // Second tie-breaker: row then column (consistent ordering)
+        return (a.y === b.y) ? a.x - b.x : a.y - b.y;
+      });
+    }
+    
+    return bestMoves[0];
+  }
+
+  public updateLastMove(x: number, y: number, wasHit: boolean) {
+    // Add to internal tracking board
+    if (this.isValidPosition(x, y) && this.board[y]) {
+      this.board[y][x] = {
+        ...this.board[y][x],
+        isHit: true,
+        hasShip: wasHit
+      };
+    }
+    
+    if (wasHit) {
+      // Add to hit chain
+      this.hitChain.push({ x, y });
+      this.lastHit = { x, y };
+      
+      // If this is the first hit, disable parity hunting
+      if (this.hitChain.length === 1) {
+        this.parityHunting = false;
+      }
+      
+      // If we have multiple hits, sort the hit chain to maintain logical order
+      if (this.hitChain.length >= 2 && this.hitDirection) {
+        this.sortHitChain();
+      }
+      
+      if (!this.hitDirection && this.hitChain.length >= 2) {
+        // Determine direction based on hits
+        const first = this.hitChain[0];
+        const second = this.hitChain[1];
+        
+        if (first.x !== second.x) {
+          this.hitDirection = 'horizontal';
+        } else if (first.y !== second.y) {
+          this.hitDirection = 'vertical';
+        }
+      }
+    }
+  }
+  
+  // Call this method when a ship is sunk to reset targeting
+  public resetTargeting() {
+    this.hitChain = [];
+    this.hitDirection = null;
+    this.lastHit = null;
+    this.potentialTargets = [];
+  }
+  
+  // Mark a ship as sunk
+  public markShipAsSunk(shipType: string) {
+    if (shipType) {
+      this.sunkShips.add(shipType);
+      console.log(`[AI] Marked ship ${shipType} as sunk. Sunk ships: ${Array.from(this.sunkShips).join(', ')}`);
+    }
+    // Always reset targeting when a ship is sunk
+    this.resetTargeting();
+  }
+  
+  // Add a position to potential targets, avoiding duplicates
+  private addPotentialTarget(x: number, y: number): void {
+    // Check if this position already exists in potential targets
+    const exists = this.potentialTargets.some(target => 
+      target.x === x && target.y === y
+    );
+    
+    if (!exists) {
+      this.potentialTargets.push({ x, y });
+    }
+  }
+  
+  private sortHitChain() {
+    if (this.hitDirection === 'horizontal') {
+      this.hitChain.sort((a, b) => a.x - b.x);
+    } else if (this.hitDirection === 'vertical') {
+      this.hitChain.sort((a, b) => a.y - b.y);
+    }
+  }
+
+  // Count total hits on the board
+  private countHits(opponentBoard: Cell[][]): number {
+    let hitCount = 0;
+    for (let y = 0; y < this.config.boardSize; y++) {
+      for (let x = 0; x < this.config.boardSize; x++) {
+        if (opponentBoard[y][x].isHit) {
+          hitCount++;
+        }
+      }
+    }
+    return hitCount;
   }
 
   // Check if a cell is isolated (surrounded by misses or edges) such that no ship can fit
@@ -833,210 +1029,6 @@ export class BattleshipAI {
     }
     
     return probabilityMap;
-  }
-
-  private findHighestProbabilityMove(probabilityMap: number[][], opponentBoard: Cell[][]): { x: number; y: number } {
-    let maxProb = -1;
-    let bestMoves: { x: number; y: number }[] = [];
-    
-    for (let y = 0; y < this.config.boardSize; y++) {
-      for (let x = 0; x < this.config.boardSize; x++) {
-        if (!opponentBoard[y][x].isHit) {
-          // Skip positions adjacent to sunk ships
-          if (this.isAdjacentToSunkShip(opponentBoard, x, y)) {
-            continue;
-          }
-          
-          if (probabilityMap[y][x] > maxProb) {
-            maxProb = probabilityMap[y][x];
-            bestMoves = [{ x, y }];
-          } else if (probabilityMap[y][x] === maxProb) {
-            bestMoves.push({ x, y });
-          }
-        }
-      }
-    }
-    
-    // Use weighted random selection instead of pure random
-    if (bestMoves.length > 1) {
-      // Sort by additional criteria for tiebreaking
-      bestMoves.sort((a, b) => {
-        const aValue = this.calculatePositionValue(a.x, a.y, opponentBoard);
-        const bValue = this.calculatePositionValue(b.x, b.y, opponentBoard);
-        return bValue - aValue;
-      });
-      
-      // 60% chance to pick the best one, 40% to pick others
-      if (Math.random() < 0.6) {
-        return bestMoves[0];
-      } else {
-        // Pick from the rest with equal probability
-        const rest = bestMoves.slice(1);
-        return rest[Math.floor(Math.random() * rest.length)];
-      }
-    }
-    
-    return bestMoves[Math.floor(Math.random() * bestMoves.length)];
-  }
-
-  public updateLastMove(x: number, y: number, wasHit: boolean) {
-    // Add to internal tracking board
-    if (this.isValidPosition(x, y) && this.board[y]) {
-      this.board[y][x] = {
-        ...this.board[y][x],
-        isHit: true,
-        hasShip: wasHit
-      };
-    }
-    
-    if (wasHit) {
-      // Add to hit chain
-      this.hitChain.push({ x, y });
-      this.lastHit = { x, y };
-      
-      // If we have multiple hits, sort the hit chain to maintain logical order
-      if (this.hitChain.length >= 2 && this.hitDirection) {
-        this.sortHitChain();
-      }
-      
-      if (!this.hitDirection && this.hitChain.length >= 2) {
-        // Determine direction based on hits
-        const first = this.hitChain[0];
-        const second = this.hitChain[1];
-        
-        if (first.x !== second.x) {
-          this.hitDirection = 'horizontal';
-        } else if (first.y !== second.y) {
-          this.hitDirection = 'vertical';
-        }
-        
-        // Once direction is known, clear potential targets
-        // (we'll focus on the known direction rather than exploring others)
-        this.potentialTargets = [];
-      }
-    } else {
-      // Reset direction if needed, but keep the hit chain
-      // This allows AI to try other directions around the hit chain
-      if (this.hitDirection && this.hitChain.length > 0) {
-        const lastHit = this.hitChain[this.hitChain.length - 1];
-        
-        // If we missed when trying to extend a chain, try the other direction
-        if (this.hitDirection === 'horizontal') {
-          const oppositeDirs = [
-            { x: -1, y: 0 },
-            { x: 1, y: 0 }
-          ];
-          
-          // Clear existing potential targets when changing strategies
-          this.potentialTargets = [];
-          
-          for (const dir of oppositeDirs) {
-            const nx = lastHit.x + dir.x;
-            const ny = lastHit.y + dir.y;
-            
-            if (this.isValidPosition(nx, ny) && !this.board[ny][nx].isHit) {
-              this.addPotentialTarget(nx, ny);
-            }
-          }
-        } else if (this.hitDirection === 'vertical') {
-          const oppositeDirs = [
-            { x: 0, y: -1 },
-            { x: 0, y: 1 }
-          ];
-          
-          // Clear existing potential targets when changing strategies
-          this.potentialTargets = [];
-          
-          for (const dir of oppositeDirs) {
-            const nx = lastHit.x + dir.x;
-            const ny = lastHit.y + dir.y;
-            
-            if (this.isValidPosition(nx, ny) && !this.board[ny][nx].isHit) {
-              this.addPotentialTarget(nx, ny);
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  // Call this method when a ship is sunk to reset targeting
-  public resetTargeting() {
-    this.hitChain = [];
-    this.hitDirection = null;
-    this.lastHit = null;
-    this.potentialTargets = [];
-  }
-  
-  // Mark a ship as sunk
-  public markShipAsSunk(shipType: string) {
-    if (shipType) {
-      this.sunkShips.add(shipType);
-      console.log(`[AI] Marked ship ${shipType} as sunk. Sunk ships: ${Array.from(this.sunkShips).join(', ')}`);
-    }
-    // Always reset targeting when a ship is sunk
-    this.resetTargeting();
-  }
-  
-  // Add a position to potential targets, avoiding duplicates
-  private addPotentialTarget(x: number, y: number): void {
-    // Check if this position already exists in potential targets
-    const exists = this.potentialTargets.some(target => 
-      target.x === x && target.y === y
-    );
-    
-    if (!exists) {
-      this.potentialTargets.push({ x, y });
-    }
-  }
-  
-  private sortHitChain() {
-    if (this.hitDirection === 'horizontal') {
-      this.hitChain.sort((a, b) => a.x - b.x);
-    } else if (this.hitDirection === 'vertical') {
-      this.hitChain.sort((a, b) => a.y - b.y);
-    }
-  }
-
-  // Count total hits on the board
-  private countHits(opponentBoard: Cell[][]): number {
-    let hitCount = 0;
-    for (let y = 0; y < this.config.boardSize; y++) {
-      for (let x = 0; x < this.config.boardSize; x++) {
-        if (opponentBoard[y][x].isHit) {
-          hitCount++;
-        }
-      }
-    }
-    return hitCount;
-  }
-
-  // Make a move biased toward the center portion of the board
-  private makeCenterBiasedMove(opponentBoard: Cell[][]): { x: number; y: number } {
-    const centerRegion = {
-      minX: Math.floor(this.config.boardSize * 0.3),
-      maxX: Math.floor(this.config.boardSize * 0.7),
-      minY: Math.floor(this.config.boardSize * 0.3),
-      maxY: Math.floor(this.config.boardSize * 0.7)
-    };
-    
-    // Collect unhit cells in center region
-    const centerCells: { x: number; y: number }[] = [];
-    for (let y = centerRegion.minY; y <= centerRegion.maxY; y++) {
-      for (let x = centerRegion.minX; x <= centerRegion.maxX; x++) {
-        if (!opponentBoard[y][x].isHit && !this.isAdjacentToSunkShip(opponentBoard, x, y)) {
-          centerCells.push({ x, y });
-        }
-      }
-    }
-    
-    // If there are available center cells, pick one randomly
-    if (centerCells.length > 0) {
-      return centerCells[Math.floor(Math.random() * centerCells.length)];
-    }
-    
-    // Fall back to random move if no center cells available
-    return this.makeRandomMove(opponentBoard);
   }
 
   // Expose AI internal state for debugging

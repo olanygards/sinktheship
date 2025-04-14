@@ -565,25 +565,7 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
   };
 
   const handlePlayAgain = async () => {
-    try {
-      const newPlayerId = currentUser?.uid || `player_${Date.now()}`;
-      const gameRef = await addDoc(collection(db, 'games'), {
-        players: {
-          [newPlayerId]: {
-            ready: false,
-            userId: currentUser?.uid || null
-          }
-        },
-        status: 'waiting',
-        createdAt: new Date().toISOString()
-      });
-      
-      console.log(`Navigating to new game: /?gameId=${gameRef.id}&playerId=${newPlayerId}`);
-      window.location.href = `/?gameId=${gameRef.id}&playerId=${newPlayerId}`;
-    } catch (error) {
-      console.error('Error creating new game:', error);
-      setConnectionError('Kunde inte skapa ett nytt spel. Försök igen.');
-    }
+    router.push('/lobby');
   };
 
   const handleFinishPlacement = (finalPlayerBoard: Cell[][]) => {
@@ -875,16 +857,12 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
               </div>
             </div>
             <div className="flex justify-center gap-4">
-              <Link href="/single-player">
-                <button className="bg-[#8bb8a8] text-white px-6 py-3 rounded text-lg">
-                  Spela igen
-                </button>
-              </Link>
-              <Link href="/">
-                <button className="bg-gray-500 text-white px-6 py-3 rounded text-lg">
-                  Tillbaka till startsidan
-                </button>
-              </Link>
+              <button 
+                onClick={handlePlayAgain}
+                className="bg-[#8bb8a8] text-white px-6 py-3 rounded text-lg hover:bg-[#7aa798] transition-colors"
+              >
+                Spela igen
+              </button>
             </div>
           </div>
         );
@@ -924,16 +902,11 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
             </div>
             <div className="flex justify-center gap-4">
               <button 
-                onClick={handlePlayAgain} // Use the existing multiplayer play again
-                className="bg-[#8bb8a8] text-white px-6 py-3 rounded text-lg"
+                onClick={handlePlayAgain}
+                className="bg-[#8bb8a8] text-white px-6 py-3 rounded text-lg hover:bg-[#7aa798] transition-colors"
               >
                 Spela igen
               </button>
-              <Link href="/active-games">
-                <button className="bg-gray-500 text-white px-6 py-3 rounded text-lg">
-                  Tillbaka till mina spel
-                </button>
-              </Link>
             </div>
           </div>
         );
