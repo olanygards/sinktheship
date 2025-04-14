@@ -200,8 +200,8 @@ body {
 }
 
 .ship-square {
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.9rem;
+  height: 1.9rem;
   display: flex;
   justify-content: center;
   align-items: center;

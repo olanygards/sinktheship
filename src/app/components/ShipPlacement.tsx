@@ -715,14 +715,14 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
               <button
                 key={ship.id}
                 onClick={() => handleSelectShip(ship)}
-                className={`p-0 ${
+                className={`p-1 ${
                   selectedShip?.id === ship.id || selectedShipFromBoard?.id === ship.id
-                    ? 'ring-2 ring-[var(--primary)]'
+                    ? 'ring-2 ring-[var(--primary)] rounded-md'
                     : ''
                 } ${ship.placed ? 'opacity-70' : 'opacity-100'}`}
                 disabled={!ship.placed && allShipsPlaced}
               >
-                <div className="flex gap-[1px]">
+                <div className="flex gap-[4px] bg-black p-1 rounded-md">
                   {Array.from({ length: ship.size }).map((_, i) => (
                     <div 
                       key={i} 
@@ -739,27 +739,30 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
         </div>
         
         <div className="flex justify-center mb-4">
-          <button 
-            className="p-2 bg-[var(--board-background)] flex items-center justify-center transition-all rounded-[5px]"
-            onClick={() => setOrientation(orientation === 'horizontal' ? 'vertical' : 'horizontal')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-[var(--primary)] flex items-center justify-center">
-                {orientation === 'horizontal' ? (
-                  <div className="w-6 h-2 bg-white"></div>
-                ) : (
-                  <div className="w-2 h-6 bg-white"></div>
-                )}
+          <div className="flex items-center gap-4">
+            <span className="text-lg font-bold text-[var(--primary)]">Rotera skepp</span>
+            <button 
+              className="p-2 bg-[var(--board-background)] flex items-center justify-center transition-all rounded-[5px]"
+              onClick={() => setOrientation(orientation === 'horizontal' ? 'vertical' : 'horizontal')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[var(--primary)] flex items-center justify-center">
+                  {orientation === 'horizontal' ? (
+                    <div className="w-6 h-2 bg-white"></div>
+                  ) : (
+                    <div className="w-2 h-6 bg-white"></div>
+                  )}
+                </div>
+                <div className="flex flex-col">
+                  <img 
+                    src="/images/rotate-icon.svg" 
+                    alt="Rotate Ship" 
+                    className="h-6 w-6 text-[var(--primary)]"
+                  />
+                </div>
               </div>
-              <div className="flex flex-col">
-                <img 
-                  src="/images/rotate-icon.svg" 
-                  alt="Rotate Ship" 
-                  className="h-6 w-6 text-[var(--primary)]"
-                />
-              </div>
-            </div>
-          </button>
+            </button>
+          </div>
         </div>
       </div>
       
