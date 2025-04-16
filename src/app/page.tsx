@@ -9,8 +9,8 @@ import Link from 'next/link';
 
 function HomeContent() {
   const searchParams = useSearchParams();
-  const gameId = searchParams.get('gameId');
-  const playerId = searchParams.get('playerId');
+  const gameId = searchParams?.get('gameId');
+  const playerId = searchParams?.get('playerId');
   const router = useRouter();
   const { currentUser } = useAuth();
   const [isRedirecting, setIsRedirecting] = useState(false);

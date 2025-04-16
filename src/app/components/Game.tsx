@@ -289,8 +289,8 @@ const Game: React.FC<GameProps> = ({ gameId, playerId, isSinglePlayer = false, d
               // ... (AI extra turn logic) ...
               setPlayerBoard(finalBoardForState); 
               setIsPlayerTurn(false); 
-              const sunkShipCheck = checkAndMarkSunkShips(finalBoardForState, shipTypeHitByAI as ShipType); 
-              if (sunkShipCheck.wasSunk) {
+              const sunkShipCheck = checkAndMarkSunkShips(finalBoardForState, shipTypeHitByAI as ShipType);
+              if (sunkShipCheck.wasSunk && shipTypeHitByAI) {
                 aiOpponent.markShipAsSunk(shipTypeHitByAI); // Mark ship as sunk and reset targeting
                 setGameMessage(`AI sänkte ditt ${shipTypeHitByAI}! AI skjuter igen...`);
               } else {

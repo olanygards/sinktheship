@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from 'firebase/auth';
+import { User, UserCredential, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from './config';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -9,6 +9,8 @@ interface AuthContextType {
   currentUser: User | null;
   userProfile: UserProfile | null;
   isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<UserCredential>;
+  signUp: (email: string, password: string) => Promise<UserCredential>;
 }
 
 interface UserProfile {
@@ -27,6 +29,8 @@ const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   userProfile: null,
   isLoading: true,
+  signIn: () => Promise.reject('Not implemented'),
+  signUp: () => Promise.reject('Not implemented'),
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -60,10 +64,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return unsubscribe;
   }, []);
 
+  const signIn = (email: string, password: string) => {
+    return signInWithEmailAndPassword(auth, email, password);
+  };
+
+  const signUp = (email: string, password: string) => {
+    return createUserWithEmailAndPassword(auth, email, password);
+  };
+
   const value = {
     currentUser,
     userProfile,
     isLoading,
+    signIn,
+    signUp,
   };
 
   return (

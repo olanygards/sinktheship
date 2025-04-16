@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../firebase/config';
 import { doc, updateDoc } from 'firebase/firestore';
-import { Cell, Ship } from '../../utils/types';
+import { Cell, Ship as ShipType } from '../../utils/types';
 import ShipStatus from './ShipStatus';
+import GameBoard from './GameBoard';
 
 // Define BOARD_SIZE and convertToGrid locally for ShipPlacement
 const BOARD_SIZE = 10;
@@ -28,23 +29,53 @@ interface ShipPlacementProps {
   onFinishPlacement: (finalBoard: Cell[][]) => void; // Updated prop signature
 }
 
+interface Position {
+  x: number;
+  y: number;
+}
+
+type ShipKind = 'carrier' | 'battleship' | 'cruiser' | 'submarine' | 'destroyer';
+
+interface ShipInfo {
+  size: number;
+  name: string;
+  type: ShipKind;
+}
+
+// Update Cell type to include shipType as a nullable field
+interface ExtendedCell extends Omit<Cell, 'shipType'> {
+  shipType: ShipKind | undefined;
+}
+
+interface Ship {
+  type: ShipKind;
+  size: number;
+  placed: boolean;
+  name: string;
+}
+
+const SHIP_TYPES: Record<ShipKind, Ship> = {
+  carrier: { type: 'carrier', size: 5, placed: false, name: 'Carrier' },
+  battleship: { type: 'battleship', size: 4, placed: false, name: 'Battleship' },
+  cruiser: { type: 'cruiser', size: 3, placed: false, name: 'Cruiser' },
+  submarine: { type: 'submarine', size: 3, placed: false, name: 'Submarine' },
+  destroyer: { type: 'destroyer', size: 2, placed: false, name: 'Destroyer' }
+};
+
 const ShipPlacement: React.FC<ShipPlacementProps> = ({
   gameId, 
   playerId, 
-  board, 
+  board: initialBoard, 
   onFinishPlacement
 }) => {
-  const [ships, setShips] = useState<Ship[]>([
-    { id: 1, size: 5, placed: false, type: 'carrier' },
-    { id: 2, size: 4, placed: false, type: 'battleship' },
-    { id: 3, size: 3, placed: false, type: 'cruiser' },
-    { id: 4, size: 3, placed: false, type: 'submarine' },
-    { id: 5, size: 2, placed: false, type: 'destroyer' },
-  ]);
-  const [selectedShip, setSelectedShip] = useState<Ship | null>(null);
-  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
-  const [hoveredCell, setHoveredCell] = useState<Cell | null>(null);
-  const [flatBoard, setFlatBoard] = useState<Cell[]>(board.flat());
+  const [board, setBoard] = useState<ExtendedCell[][]>(initialBoard.map(row => 
+    row.map(cell => ({ ...cell, shipType: undefined }))
+  ));
+  const [selectedShip, setSelectedShip] = useState<ShipInfo | null>(null);
+  const [placedShips, setPlacedShips] = useState<Set<ShipKind>>(new Set());
+  const [isHorizontal, setIsHorizontal] = useState(true);
+  const [hoveredCell, setHoveredCell] = useState<Position | null>(null);
+  const [error, setError] = useState<string>('');
 
   // For displaying ship visualization
   const [availableShips, setAvailableShips] = useState({
@@ -60,90 +91,129 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
 
   // Automatically select the first unplaced ship when component loads
   useEffect(() => {
-    const firstUnplacedShip = ships.find(ship => !ship.placed);
+    const firstUnplacedShip = Object.values(SHIP_TYPES).find(ship => !placedShips.has(ship.type));
     if (firstUnplacedShip && !selectedShip) {
       setSelectedShip(firstUnplacedShip);
     }
-  }, [ships, selectedShip]);
+  }, [placedShips, selectedShip]);
 
-  // Function to check if a ship placement is valid
-  const isValidPlacement = (shipSize: number, x: number, y: number): boolean => {
-    if (orientation === 'horizontal') {
-      // Check if ship extends beyond the board
-      if (x + shipSize > 10) return false;
-      
-      // Check if any of the cells already have a ship
-      for (let i = 0; i < shipSize; i++) {
-        const cellExists = flatBoard.some(
-          cell => cell.x === x + i && cell.y === y && cell.hasShip
-        );
-        if (cellExists) return false;
-        
-        // Check for adjacent ships (horizontal, vertical, and diagonal)
-        for (let dx = -1; dx <= 1; dx++) {
-          for (let dy = -1; dy <= 1; dy++) {
-            // Skip the cell itself (dx=0, dy=0)
-            if (dx === 0 && dy === 0) continue;
-            
-            const checkX = x + i + dx;
-            const checkY = y + dy;
-            
-            // Check if position is valid on the board
-            if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
-              // Check if there's a ship at this position
-              const adjacentShip = flatBoard.some(
-                cell => cell.x === checkX && cell.y === checkY && cell.hasShip
-              );
-              
-              if (adjacentShip) return false;
+  const rotateShip = () => {
+    if (selectedShip) {
+      setIsHorizontal(!isHorizontal);
+    }
+  };
+
+  const handleCellHover = (x: number, y: number) => {
+    setHoveredCell({ x, y });
+  };
+
+  const isValidPlacement = (x: number, y: number, ship: ShipInfo, horizontal: boolean): boolean => {
+    if (horizontal) {
+      if (x + ship.size > 10) return false;
+      for (let i = 0; i < ship.size; i++) {
+        if (board[y][x + i].hasShip) return false;
+        // Check adjacent cells
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const newY = y + dy;
+            const newX = x + i + dx;
+            if (
+              newY >= 0 && newY < 10 &&
+              newX >= 0 && newX < 10 &&
+              board[newY][newX].hasShip
+            ) {
+              return false;
             }
           }
         }
       }
     } else {
-      // Check if ship extends beyond the board
-      if (y + shipSize > 10) return false;
-      
-      // Check if any of the cells already have a ship
-      for (let i = 0; i < shipSize; i++) {
-        const cellExists = flatBoard.some(
-          cell => cell.x === x && cell.y === y + i && cell.hasShip
-        );
-        if (cellExists) return false;
-        
-        // Check for adjacent ships (horizontal, vertical, and diagonal)
-        for (let dx = -1; dx <= 1; dx++) {
-          for (let dy = -1; dy <= 1; dy++) {
-            // Skip the cell itself (dx=0, dy=0)
-            if (dx === 0 && dy === 0) continue;
-            
-            const checkX = x + dx;
-            const checkY = y + i + dy;
-            
-            // Check if position is valid on the board
-            if (checkX >= 0 && checkX < 10 && checkY >= 0 && checkY < 10) {
-              // Check if there's a ship at this position
-              const adjacentShip = flatBoard.some(
-                cell => cell.x === checkX && cell.y === checkY && cell.hasShip
-              );
-              
-              if (adjacentShip) return false;
+      if (y + ship.size > 10) return false;
+      for (let i = 0; i < ship.size; i++) {
+        if (board[y + i][x].hasShip) return false;
+        // Check adjacent cells
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const newY = y + i + dy;
+            const newX = x + dx;
+            if (
+              newY >= 0 && newY < 10 &&
+              newX >= 0 && newX < 10 &&
+              board[newY][newX].hasShip
+            ) {
+              return false;
             }
           }
         }
       }
     }
-    
     return true;
   };
 
-  // Get cells that would be affected by placing a ship at the hovered position
-  const getHoveredCells = () => {
+  const placeShip = async (x: number, y: number) => {
+    if (!selectedShip) return;
+    
+    if (!isValidPlacement(x, y, selectedShip, isHorizontal)) {
+      setError('Ogiltig placering. Försök igen.');
+      return;
+    }
+
+    const newBoard = board.map(row => row.map(cell => ({ ...cell })));
+    
+    if (isHorizontal) {
+      for (let i = 0; i < selectedShip.size; i++) {
+        newBoard[y][x + i] = {
+          ...newBoard[y][x + i],
+          hasShip: true,
+          shipType: selectedShip.type
+        };
+      }
+    } else {
+      for (let i = 0; i < selectedShip.size; i++) {
+        newBoard[y + i][x] = {
+          ...newBoard[y + i][x],
+          hasShip: true,
+          shipType: selectedShip.type
+        };
+      }
+    }
+
+    setBoard(newBoard);
+    setPlacedShips(new Set([...placedShips, selectedShip.type]));
+    setSelectedShip(null);
+    setError('');
+
+    // If all ships are placed, update the game state
+    if (placedShips.size === 4) { // After placing the last ship
+      try {
+        if (gameId !== 'ai_game') {
+          const gameRef = doc(db, 'games', gameId);
+          await updateDoc(gameRef, {
+            [`players.${playerId}.board`]: newBoard.flat(),
+            [`players.${playerId}.ready`]: true
+          });
+        }
+        // Convert the board to match the expected Cell type
+        const finalBoard = newBoard.map(row => 
+          row.map(cell => ({
+            ...cell,
+            shipType: cell.shipType || undefined
+          }))
+        );
+        onFinishPlacement(finalBoard);
+      } catch (error) {
+        console.error('Error updating game state:', error);
+        setError('Ett fel uppstod. Försök igen.');
+      }
+    }
+  };
+
+  const getPreviewCells = (): Position[] => {
     if (!selectedShip || !hoveredCell) return [];
     
-    const cells = [];
+    const cells: Position[] = [];
     
-    if (orientation === 'horizontal') {
+    if (isHorizontal) {
       for (let i = 0; i < selectedShip.size; i++) {
         if (hoveredCell.x + i < 10) {
           cells.push({ x: hoveredCell.x + i, y: hoveredCell.y });
@@ -160,124 +230,16 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
     return cells;
   };
 
-  // Helper function to remove ALL instances of a ship type from the board
-  const cleanupShipType = async (shipType: string | undefined) => {
-    if (!shipType) return flatBoard;
-    
-    const newBoard = flatBoard.map(cell => 
-      cell.shipType === shipType ? { ...cell, hasShip: false, shipId: null, shipType: null } : cell
-    );
-    setFlatBoard(newBoard);
-    
-    // Skip Firestore update for single player mode (AI games)
-    if (!gameId.startsWith('ai_')) {
-      try {
-        const gameRef = doc(db, 'games', gameId);
-        await updateDoc(gameRef, {
-          [`players.${playerId}.board`]: newBoard
-        });
-      } catch (error) {
-        console.error('Error cleaning up ship type:', error);
-      }
-    }
-    
-    return newBoard;
-  };
-
-  const placeShip = async () => {
-    if (!selectedShip || !hoveredCell) return;
-    
-    if (!isValidPlacement(selectedShip.size, hoveredCell.x, hoveredCell.y)) return;
-
-    // Disable interaction while processing
-    const shipTypeToPlace = selectedShip.type;
-    const currentShipId = selectedShip.id;
-    setSelectedShip(null); // Immediately remove selection to prevent multiple clicks
-    
-    // IMPORTANT: Clean up ALL ships of this type from the board before placing
-    // and wait for the cleaned board to be returned
-    const cleanedBoard = await cleanupShipType(shipTypeToPlace);
-    
-    // Use the cleaned board to ensure we have the latest state
-    const newBoard = [...cleanedBoard];
-    
-    if (orientation === 'horizontal') {
-      for (let i = 0; i < selectedShip.size; i++) {
-        const index = newBoard.findIndex(
-          cell => cell.x === hoveredCell.x + i && cell.y === hoveredCell.y
-        );
-        if (index !== -1) {
-          newBoard[index] = { 
-            ...newBoard[index], 
-            hasShip: true,
-            shipId: selectedShip.id.toString(),
-            shipType: shipTypeToPlace
-          };
-        }
-      }
-    } else {
-      for (let i = 0; i < selectedShip.size; i++) {
-        const index = newBoard.findIndex(
-          cell => cell.x === hoveredCell.x && cell.y === hoveredCell.y + i
-        );
-        if (index !== -1) {
-          newBoard[index] = { 
-            ...newBoard[index], 
-            hasShip: true,
-            shipId: selectedShip.id.toString(),
-            shipType: shipTypeToPlace
-          };
-        }
-      }
-    }
-    
-    // Update the board state with new ship
-    setFlatBoard(newBoard);
-    
-    // Mark this ship as placed
-    const newShips = ships.map(ship => 
-      ship.id === currentShipId ? { ...ship, placed: true } : ship
-    );
-    setShips(newShips);
-    
-    // Update the board in Firestore (or just return for single player)
-    await updateBoard();
-    
-    // Automatically select the next unplaced ship
-    const nextUnplacedShip = newShips.find(ship => !ship.placed);
-    if (nextUnplacedShip) {
-      setSelectedShip(nextUnplacedShip);
-    }
-    
-    // Check if all ships are placed
-    if (newShips.every(ship => ship.placed)) {
-      setPlayerReady();
-    }
-  };
-
-  // Remove a ship from the board to allow repositioning
-  const removeShip = async (shipId: number) => {
-    const shipToRemove = ships.find(s => s.id === shipId);
-    if (!shipToRemove) {
-      console.error(`Ship with ID ${shipId} not found`);
-      return;
-    }
-    
-    console.log(`Removing ship with ID: ${shipId}, type: ${shipToRemove.type}`);
-    
-    // Remove by ship type to ensure all instances are removed
-    await cleanupShipType(shipToRemove.type);
-  };
-
-  const hoveredCells = getHoveredCells();
-  const isValidHover = selectedShip && hoveredCell && 
-    isValidPlacement(selectedShip.size, hoveredCell.x, hoveredCell.y);
+  const previewCells = hoveredCell ? getPreviewCells() : [];
+  const isValidPreview = hoveredCell && selectedShip ? 
+    isValidPlacement(hoveredCell.x, hoveredCell.y, selectedShip, isHorizontal) : 
+    false;
 
   // Update the availableShips state when a ship is placed
   useEffect(() => {
     const updatedShips = { ...availableShips };
-    ships.forEach(ship => {
-      if (ship.placed) {
+    Object.values(SHIP_TYPES).forEach(ship => {
+      if (placedShips.has(ship.type)) {
         if (ship.size === 5) updatedShips.carrier.sunk = true;
         else if (ship.size === 4) updatedShips.battleship.sunk = true;
         else if (ship.size === 3 && !updatedShips.cruiser.sunk) updatedShips.cruiser.sunk = true;
@@ -286,7 +248,7 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
       }
     });
     setAvailableShips(updatedShips);
-  }, [ships]);
+  }, [placedShips]);
 
   // Get ship name based on size
   const getShipName = (size: number): string => {
@@ -318,9 +280,9 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
   };
 
   // Render ship visualization
-  const renderShipIcons = (ship: Ship) => {
-    const { letter, color } = getShipInfo(ship.type || '');
-    const icons = [];
+  const renderShipIcons = (ship: ShipInfo) => {
+    const { letter, color } = getShipInfo(ship.type);
+    const icons: JSX.Element[] = [];
     
     for (let i = 0; i < ship.size; i++) {
       icons.push(
@@ -341,8 +303,8 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
   };
 
   // Function to detect the orientation of a placed ship
-  const detectShipOrientation = (shipId: number) => {
-    const shipCells = flatBoard.filter(cell => cell.shipId === shipId.toString());
+  const detectShipOrientation = (shipId: string) => {
+    const shipCells = board.flat().filter(cell => cell.shipType === shipId);
     console.log(`Found ${shipCells.length} cells for ship ${shipId} when detecting orientation`);
     if (shipCells.length < 2) return 'horizontal'; // Default
     
@@ -352,71 +314,70 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
   };
 
   // Modify handleSelectShip to handle both button and board selection
-  const handleSelectShip = (ship: Ship) => {
+  const handleSelectShip = (ship: ShipInfo) => {
     setSelectedShip(ship);
     setSelectedShipFromBoard(null);
     
     // If ship is already placed, detect its orientation
-    if (ship.placed) {
-      const shipCells = flatBoard.filter(cell => cell.shipId === ship.id.toString());
-      console.log(`Selected ship ${ship.id} (${ship.type}), found ${shipCells.length} cells`);
-      setOrientation(detectShipOrientation(ship.id));
+    if (placedShips.has(ship.type)) {
+      const shipCells = board.flat().filter(cell => cell.shipType === ship.type);
+      console.log(`Selected ship ${ship.type}, found ${shipCells.length} cells`);
+      setIsHorizontal(detectShipOrientation(ship.type) === 'horizontal');
     }
   };
 
   // Add new function to handle board cell click for ship selection
-  const handleBoardCellClick = (cell: Cell) => {
-    if (cell.hasShip && cell.shipId) {
-      const shipId = parseInt(cell.shipId);
-      const ship = ships.find(s => s.id === shipId);
+  const handleBoardCellClick = (cell: ExtendedCell) => {
+    if (cell.hasShip && cell.shipType) {
+      const ship = SHIP_TYPES[cell.shipType];
       if (ship) {
         setSelectedShip(ship);
-        setSelectedShipFromBoard(ship);
-        setOrientation(detectShipOrientation(ship.id));
+        setSelectedShipFromBoard(null);
+        setIsHorizontal(detectShipOrientation(cell.shipType) === 'horizontal');
       }
     } else if (selectedShip) {
-      placeShip();
+      placeShip(cell.x, cell.y);
     }
   };
 
   // Reset function to clear duplicate ships
   const resetShips = async () => {
     // First identify all ships that have cells on the board
-    const shipIdsOnBoard = new Set();
-    flatBoard.forEach(cell => {
-      if (cell.hasShip && cell.shipId) {
-        shipIdsOnBoard.add(cell.shipId);
+    const shipIdsOnBoard = new Set<ShipKind>();
+    board.flat().forEach(cell => {
+      if (cell.hasShip && cell.shipType) {
+        shipIdsOnBoard.add(cell.shipType);
       }
     });
     
     console.log('Ship IDs on board:', Array.from(shipIdsOnBoard));
-    console.log('Ships in state:', ships.map(s => `${s.id}:${s.placed}`).join(', '));
+    console.log('Ships in state:', Object.values(SHIP_TYPES).map(s => `${s.type}:${placedShips.has(s.type)}`).join(', '));
     
     // Create a new board with all ships removed
-    const clearedBoard = flatBoard.map(cell => ({
+    const clearedBoard = board.map(row => row.map(cell => ({
       ...cell,
       hasShip: false,
-      shipId: null,
-      shipType: null
-    }));
+      shipType: undefined
+    })));
     
     // Reset all ships to unplaced
-    const resetShipsArray = ships.map(ship => ({
+    const resetShipsArray = Object.values(SHIP_TYPES).map(ship => ({
       ...ship,
       placed: false
     }));
     
-    setFlatBoard(clearedBoard);
-    setShips(resetShipsArray);
+    setBoard(clearedBoard);
+    setPlacedShips(new Set());
     
     // Update Firestore
     try {
       const gameRef = doc(db, 'games', gameId);
       await updateDoc(gameRef, {
-        [`players.${playerId}.board`]: clearedBoard
+        [`players.${playerId}.board`]: clearedBoard.flat()
       });
     } catch (error) {
       console.error('Error resetting board:', error);
+      setError('Ett fel uppstod när brädet skulle återställas.');
     }
   };
 
@@ -426,31 +387,31 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
       // Skip Firestore update for single player mode (AI games)
       if (gameId.startsWith('ai_')) {
         console.log('Single player mode - skipping Firestore update');
-        return flatBoard;
+        return board.flat();
       }
 
       const gameRef = doc(db, 'games', gameId);
       await updateDoc(gameRef, {
-        [`players.${playerId}.board`]: flatBoard
+        [`players.${playerId}.board`]: board.flat()
       });
       console.log('Board updated in Firestore');
-      return flatBoard;
+      return board.flat();
     } catch (error) {
       console.error('Error updating board:', error);
-      return flatBoard;
+      return board.flat();
     }
   };
 
   // Mark the player as ready
   const setPlayerReady = async () => {
     // Ensure all ships are placed before finishing
-    if (ships.some(ship => !ship.placed)) {
+    if (Object.values(SHIP_TYPES).some(ship => !placedShips.has(ship.type))) {
       console.warn('Attempted to finish placement before all ships were placed.');
       return; // Or show an error message to the user
     }
 
     // Convert the final flat board back to a grid
-    const finalBoardGrid = convertToGrid(flatBoard);
+    const finalBoardGrid = convertToGrid(board.flat());
     console.log('[ShipPlacement] Finishing placement. Final board:', finalBoardGrid);
 
     // Skip Firestore update for single player mode (AI games)
@@ -465,7 +426,7 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
       const gameRef = doc(db, 'games', gameId);
       await updateDoc(gameRef, {
         [`players.${playerId}.ready`]: true,
-        [`players.${playerId}.board`]: flatBoard // Firestore uses the flat board
+        [`players.${playerId}.board`]: board.flat() // Firestore uses the flat board
       });
       // Pass the GRID, not the flat array, to the callback
       onFinishPlacement(finalBoardGrid); 
@@ -476,266 +437,193 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
 
   const handleRandomPlacement = async () => {
     try {
-      // Reset all ships to unplaced state
-      let randomizedShips = ships.map(ship => ({ ...ship, placed: false }));
-      setShips(randomizedShips);
+      // Reset board and ships
+      const newBoard = Array(BOARD_SIZE).fill(null).map((_, y) =>
+        Array(BOARD_SIZE).fill(null).map((_, x) => ({
+          x,
+          y,
+          isHit: false,
+          hasShip: false,
+          shipType: undefined as ShipKind | undefined
+        }))
+      );
       
-      // Clear the board
-      let randomBoard = flatBoard.map(cell => ({ 
-        ...cell, 
-        hasShip: false, 
-        shipId: null, 
-        shipType: null 
-      }));
-      setFlatBoard(randomBoard);
+      const newShips = { ...SHIP_TYPES };
+      const newPlacedShips = new Set<ShipKind>();
       
-      // Function to check if a ship placement is valid (including adjacent ships check)
-      const isValidRandomPlacement = (board: Cell[], x: number, y: number, size: number, isHorizontal: boolean): boolean => {
-        // Check if ship extends beyond the board
-        if (isHorizontal && x + size > 10) return false;
-        if (!isHorizontal && y + size > 10) return false;
-        
-        for (let i = 0; i < size; i++) {
-          const checkX = isHorizontal ? x + i : x;
-          const checkY = isHorizontal ? y : y + i;
-          
-          // Check if the cell itself has a ship
-          const cellHasShip = board.some(cell => cell.x === checkX && cell.y === checkY && cell.hasShip);
-          if (cellHasShip) return false;
-          
-          // Check for adjacent ships (horizontal, vertical, and diagonal)
-          for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-              // Skip the cell itself (dx=0, dy=0)
-              if (dx === 0 && dy === 0) continue;
-              
-              const adjacentX = checkX + dx;
-              const adjacentY = checkY + dy;
-              
-              // Check if position is valid on the board
-              if (adjacentX >= 0 && adjacentX < 10 && adjacentY >= 0 && adjacentY < 10) {
-                // Check if there's a ship at this position
-                const adjacentShip = board.some(
-                  cell => cell.x === adjacentX && cell.y === adjacentY && cell.hasShip
-                );
-                
-                if (adjacentShip) return false;
-              }
-            }
-          }
-        }
-        
-        return true;
-      };
-      
-      // Simpel version utan adjacent check (fallback)
-      const isValidRandomPlacementSimple = (board: Cell[], x: number, y: number, size: number, isHorizontal: boolean): boolean => {
-        if (isHorizontal && x + size > 10) return false;
-        if (!isHorizontal && y + size > 10) return false;
-        
-        for (let i = 0; i < size; i++) {
-          const checkX = isHorizontal ? x + i : x;
-          const checkY = isHorizontal ? y : y + i;
-          
-          // Check if the cell itself has a ship
-          const cellHasShip = board.some(cell => cell.x === checkX && cell.y === checkY && cell.hasShip);
-          if (cellHasShip) return false;
-        }
-        
-        return true;
-      };
-      
-      // Randomly place each ship
-      for (const ship of randomizedShips) {
+      // Try to place each ship
+      for (const ship of Object.values(newShips)) {
         let placed = false;
-        let maxAttempts = 500; // Öka till 500 försök
         let attempts = 0;
+        const maxAttempts = 500;
         
         while (!placed && attempts < maxAttempts) {
-          attempts++;
+          const x = Math.floor(Math.random() * BOARD_SIZE);
+          const y = Math.floor(Math.random() * BOARD_SIZE);
+          const isHorizontal = Math.random() > 0.5;
           
-          // Randomly select orientation
-          const randomOrientation = Math.random() > 0.5 ? 'horizontal' : 'vertical';
-          
-          // Randomly select a valid starting position
-          let randomX = 0;
-          let randomY = 0;
-          
-          if (randomOrientation === 'horizontal') {
-            randomX = Math.floor(Math.random() * (10 - ship.size + 1));
-            randomY = Math.floor(Math.random() * 10);
-          } else {
-            randomX = Math.floor(Math.random() * 10);
-            randomY = Math.floor(Math.random() * (10 - ship.size + 1));
-          }
-          
-          // Check if this is a valid placement
-          if (isValidRandomPlacement(randomBoard, randomX, randomY, ship.size, randomOrientation === 'horizontal')) {
+          if (isValidRandomPlacement(newBoard, x, y, ship, isHorizontal)) {
             // Place the ship
-            if (randomOrientation === 'horizontal') {
-              for (let i = 0; i < ship.size; i++) {
-                const index = randomBoard.findIndex(
-                  cell => cell.x === randomX + i && cell.y === randomY
-                );
-                if (index !== -1) {
-                  randomBoard[index] = { 
-                    ...randomBoard[index], 
-                    hasShip: true,
-                    shipId: ship.id.toString(),
-                    shipType: ship.type
-                  };
-                }
-              }
-            } else {
-              for (let i = 0; i < ship.size; i++) {
-                const index = randomBoard.findIndex(
-                  cell => cell.x === randomX && cell.y === randomY + i
-                );
-                if (index !== -1) {
-                  randomBoard[index] = { 
-                    ...randomBoard[index], 
-                    hasShip: true,
-                    shipId: ship.id.toString(),
-                    shipType: ship.type
-                  };
-                }
+            for (let i = 0; i < ship.size; i++) {
+              const cellX = isHorizontal ? x + i : x;
+              const cellY = isHorizontal ? y : y + i;
+              if (cellX < BOARD_SIZE && cellY < BOARD_SIZE) {
+                newBoard[cellY][cellX] = {
+                  ...newBoard[cellY][cellX],
+                  hasShip: true,
+                  shipType: ship.type as ShipKind
+                };
               }
             }
             placed = true;
+            newPlacedShips.add(ship.type);
           }
+          attempts++;
         }
         
-        // Om vi inte kunde placera skeppet med standard-regler, prova med enklare regler
+        // If we couldn't place the ship with standard rules, try with simpler rules
         if (!placed) {
-          console.warn(`Could not place ship ${ship.id} after ${maxAttempts} attempts, trying with simplified rules`);
+          console.warn(`Could not place ${ship.type} with standard rules, trying simpler rules`);
           attempts = 0;
           
-          // Försök igen med enklare regler (bara kontrollera överlappning, inte intilliggande skepp)
           while (!placed && attempts < maxAttempts) {
-            attempts++;
+            const x = Math.floor(Math.random() * BOARD_SIZE);
+            const y = Math.floor(Math.random() * BOARD_SIZE);
+            const isHorizontal = Math.random() > 0.5;
             
-            const randomOrientation = Math.random() > 0.5 ? 'horizontal' : 'vertical';
-            
-            let randomX = 0;
-            let randomY = 0;
-            
-            if (randomOrientation === 'horizontal') {
-              randomX = Math.floor(Math.random() * (10 - ship.size + 1));
-              randomY = Math.floor(Math.random() * 10);
-            } else {
-              randomX = Math.floor(Math.random() * 10);
-              randomY = Math.floor(Math.random() * (10 - ship.size + 1));
-            }
-            
-            if (isValidRandomPlacementSimple(randomBoard, randomX, randomY, ship.size, randomOrientation === 'horizontal')) {
+            if (isValidRandomPlacementSimple(newBoard, x, y, ship, isHorizontal)) {
               // Place the ship
-              if (randomOrientation === 'horizontal') {
-                for (let i = 0; i < ship.size; i++) {
-                  const index = randomBoard.findIndex(
-                    cell => cell.x === randomX + i && cell.y === randomY
-                  );
-                  if (index !== -1) {
-                    randomBoard[index] = { 
-                      ...randomBoard[index], 
-                      hasShip: true,
-                      shipId: ship.id.toString(),
-                      shipType: ship.type
-                    };
-                  }
-                }
-              } else {
-                for (let i = 0; i < ship.size; i++) {
-                  const index = randomBoard.findIndex(
-                    cell => cell.x === randomX && cell.y === randomY + i
-                  );
-                  if (index !== -1) {
-                    randomBoard[index] = { 
-                      ...randomBoard[index], 
-                      hasShip: true,
-                      shipId: ship.id.toString(),
-                      shipType: ship.type
-                    };
-                  }
+              for (let i = 0; i < ship.size; i++) {
+                const cellX = isHorizontal ? x + i : x;
+                const cellY = isHorizontal ? y : y + i;
+                if (cellX < BOARD_SIZE && cellY < BOARD_SIZE) {
+                  newBoard[cellY][cellX] = {
+                    ...newBoard[cellY][cellX],
+                    hasShip: true,
+                    shipType: ship.type as ShipKind
+                  };
                 }
               }
               placed = true;
+              newPlacedShips.add(ship.type);
             }
+            attempts++;
           }
-        }
-        
-        if (!placed) {
-          console.error(`Could not place ship ${ship.id} even with simplified rules. Check if the rules are too restrictive.`);
-          // Vi fortsätter med nästa skepp ändå
         }
       }
       
-      // Mark all ships as placed (even if we could not place some)
-      randomizedShips = randomizedShips.map(ship => ({ ...ship, placed: true }));
-      setShips(randomizedShips);
-      
-      // Update the board
-      setFlatBoard(randomBoard);
+      // Update the board state
+      setBoard(newBoard);
+      setPlacedShips(newPlacedShips);
       
       // Update Firestore
-      await updateBoard();
+      if (!isSinglePlayer) {
+        const gameRef = doc(db, 'games', gameId);
+        await updateDoc(gameRef, {
+          [`boards.${playerId}`]: newBoard.map(row => 
+            row.map(cell => ({
+              x: cell.x,
+              y: cell.y,
+              isHit: cell.isHit,
+              hasShip: cell.hasShip,
+              shipType: cell.shipType || undefined
+            }))
+          )
+        });
+      }
       
-      // Mark the player as ready
+      // Mark player as ready
       setPlayerReady();
+      
     } catch (error) {
-      console.error('Error in random placement:', error);
-      alert('Det gick inte att placera skeppen slumpmässigt. Vänligen försök igen eller placera dem manuellt.');
+      console.error('Error during random placement:', error);
+      setError('Ett fel uppstod vid slumpmässig placering av skepp');
     }
   };
 
-  const allShipsPlaced = ships.every(ship => ship.placed);
+  const allShipsPlaced = Object.values(SHIP_TYPES).every(ship => placedShips.has(ship.type));
+
+  const [isSinglePlayer, setIsSinglePlayer] = useState(false);
+  const [ships, setShips] = useState<Record<ShipKind, Ship>>(SHIP_TYPES);
+
+  const isValidRandomPlacement = (board: Cell[][], x: number, y: number, ship: Ship, isHorizontal: boolean): boolean => {
+    // Check if ship extends beyond the board
+    if (isHorizontal && x + ship.size > BOARD_SIZE) return false;
+    if (!isHorizontal && y + ship.size > BOARD_SIZE) return false;
+    
+    for (let i = 0; i < ship.size; i++) {
+      const checkX = isHorizontal ? x + i : x;
+      const checkY = isHorizontal ? y : y + i;
+      
+      // Check if the cell itself has a ship
+      if (board[checkY][checkX].hasShip) return false;
+      
+      // Check for adjacent ships (horizontal, vertical, and diagonal)
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          // Skip the cell itself (dx=0, dy=0)
+          if (dx === 0 && dy === 0) continue;
+          
+          const adjacentX = checkX + dx;
+          const adjacentY = checkY + dy;
+          
+          // Check if position is valid on the board
+          if (adjacentX >= 0 && adjacentX < BOARD_SIZE && adjacentY >= 0 && adjacentY < BOARD_SIZE) {
+            // Check if there's a ship at this position
+            if (board[adjacentY][adjacentX].hasShip) return false;
+          }
+        }
+      }
+    }
+    
+    return true;
+  };
+
+  const isValidRandomPlacementSimple = (board: Cell[][], x: number, y: number, ship: Ship, isHorizontal: boolean): boolean => {
+    if (isHorizontal && x + ship.size > BOARD_SIZE) return false;
+    if (!isHorizontal && y + ship.size > BOARD_SIZE) return false;
+    
+    for (let i = 0; i < ship.size; i++) {
+      const checkX = isHorizontal ? x + i : x;
+      const checkY = isHorizontal ? y : y + i;
+      
+      // Check if the cell itself has a ship
+      if (board[checkY][checkX].hasShip) return false;
+    }
+    
+    return true;
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-4">
       <h2 className="text-xl font-bold mb-4">Placera dina skepp</h2>
       
+      {error && (
+        <div className="bg-red-100 text-red-700 px-4 py-2 rounded">
+          {error}
+        </div>
+      )}
+      
       <div className="mb-6">
         <div className="flex flex-wrap gap-3 mb-4 justify-start">
-          {ships.map(ship => {
-            // Ship type to letter code mapping
-            const shipLetterCode = {
-              carrier: 'A',
-              battleship: 'B',
-              cruiser: 'C',
-              submarine: 'S',
-              destroyer: 'D'
-            };
-            
-            // Get letter code for the ship
-            const letterCode = ship.type ? shipLetterCode[ship.type] : '';
-            
-            // Get CSS variable for color
-            const shipColor = `var(--ship-${ship.type})`;
-            
-            return (
-              <button
-                key={ship.id}
-                onClick={() => handleSelectShip(ship)}
-                className={`p-1 ${
-                  selectedShip?.id === ship.id || selectedShipFromBoard?.id === ship.id
-                    ? 'ring-2 ring-[var(--primary)] rounded-md'
-                    : ''
-                } ${ship.placed ? 'opacity-70' : 'opacity-100'}`}
-                disabled={!ship.placed && allShipsPlaced}
-              >
-                <div className="flex gap-[4px] bg-black p-1 rounded-md">
-                  {Array.from({ length: ship.size }).map((_, i) => (
-                    <div 
-                      key={i} 
-                      className="ship-square"
-                      style={{ backgroundColor: shipColor }}
-                    >
-                      {letterCode}
-                    </div>
-                  ))}
-                </div>
-              </button>
-            );
-          })}
+          {Object.values(SHIP_TYPES).map((ship) => (
+            <button
+              key={ship.type}
+              onClick={() => handleSelectShip(ship)}
+              className={`p-1 ${
+                placedShips.has(ship.type)
+                  ? 'bg-gray-300 cursor-not-allowed'
+                  : selectedShip?.type === ship.type
+                  ? 'bg-[#8bb8a8] text-white'
+                  : 'bg-white border border-[#8bb8a8] text-[#8bb8a8] hover:bg-[#8bb8a8] hover:text-white'
+              }`}
+              disabled={placedShips.has(ship.type) || allShipsPlaced}
+            >
+              <div className="flex gap-[4px] bg-black p-1 rounded-md">
+                {renderShipIcons(ship)}
+              </div>
+            </button>
+          ))}
         </div>
         
         <div className="flex justify-center mb-4">
@@ -743,11 +631,11 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
             <span className="text-lg font-bold text-[var(--primary)]">Rotera skepp</span>
             <button 
               className="p-2 bg-[var(--board-background)] flex items-center justify-center transition-all rounded-[5px]"
-              onClick={() => setOrientation(orientation === 'horizontal' ? 'vertical' : 'horizontal')}
+              onClick={rotateShip}
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-[var(--primary)] flex items-center justify-center">
-                  {orientation === 'horizontal' ? (
+                  {isHorizontal ? (
                     <div className="w-6 h-2 bg-white"></div>
                   ) : (
                     <div className="w-2 h-6 bg-white"></div>
@@ -789,11 +677,10 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
           <div className="grid grid-cols-10 gap-0 border border-[var(--grid-line)] overflow-hidden rounded-[5px]">
             {board.map((row, rowIndex) => 
               row.map((cell, colIndex) => {
-                const isHovered = hoveredCells.some(c => c.x === colIndex && c.y === rowIndex);
-                const hasShip = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.hasShip;
-                const shipType = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.shipType;
-                const shipId = flatBoard.find(c => c.x === colIndex && c.y === rowIndex)?.shipId;
-                const isSelectedShipCell = selectedShip && shipId === selectedShip.id.toString();
+                const isHovered = previewCells.some(c => c.x === colIndex && c.y === rowIndex);
+                const hasShip = board.flat().find(c => c.x === colIndex && c.y === rowIndex)?.hasShip;
+                const shipType = board.flat().find(c => c.x === colIndex && c.y === rowIndex)?.shipType;
+                const isSelectedShipCell = selectedShip && shipType === selectedShip.type;
                 
                 let cellClass = 'board-cell';
                 if (hasShip && shipType) {
@@ -802,53 +689,23 @@ const ShipPlacement: React.FC<ShipPlacementProps> = ({
                     cellClass += ' ring-2 ring-[var(--primary)] ring-inset';
                   }
                 } else if (isHovered) {
-                  cellClass += isValidHover ? ' bg-green-100' : ' bg-red-100';
+                  cellClass += isValidPreview ? ' bg-green-100' : ' bg-red-100';
                 } else {
                   cellClass += ' board-cell-water';
-                }
-                
-                // Get ship letter and color based on shipType
-                let shipLetter = '';
-                let shipColorVar = '';
-                
-                if (shipType) {
-                  switch (shipType) {
-                    case 'carrier': 
-                      shipLetter = 'A'; 
-                      shipColorVar = 'var(--ship-carrier)';
-                      break;
-                    case 'battleship': 
-                      shipLetter = 'B'; 
-                      shipColorVar = 'var(--ship-battleship)';
-                      break;
-                    case 'cruiser': 
-                      shipLetter = 'C'; 
-                      shipColorVar = 'var(--ship-cruiser)';
-                      break;
-                    case 'submarine': 
-                      shipLetter = 'S'; 
-                      shipColorVar = 'var(--ship-submarine)';
-                      break;
-                    case 'destroyer': 
-                      shipLetter = 'D'; 
-                      shipColorVar = 'var(--ship-destroyer)';
-                      break;
-                  }
                 }
                 
                 return (
                   <div
                     key={`${rowIndex}-${colIndex}`}
                     className={cellClass}
-                    onMouseEnter={() => setHoveredCell({ x: colIndex, y: rowIndex, isHit: false, hasShip: false })}
-                    onClick={() => handleBoardCellClick({ x: colIndex, y: rowIndex, isHit: false, hasShip: hasShip || false, shipId: shipId || null, shipType: shipType || null })}
+                    onMouseEnter={() => handleCellHover(colIndex, rowIndex)}
+                    onClick={() => handleBoardCellClick({ x: colIndex, y: rowIndex, isHit: false, hasShip: hasShip || false, shipType: shipType || undefined })}
                   >
                     {hasShip && shipType && (
                       <div 
                         className="w-full h-full flex items-center justify-center text-white font-bold"
-                        style={{ backgroundColor: shipColorVar }}
                       >
-                        {shipLetter}
+                        {renderShipIcons(SHIP_TYPES[shipType])}
                       </div>
                     )}
                   </div>

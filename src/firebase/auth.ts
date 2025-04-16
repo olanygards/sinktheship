@@ -103,7 +103,7 @@ export const getFriends = async (userId: string): Promise<any[]> => {
     return [];
   }
   
-  const friendsData = [];
+  const friendsData: any[] = [];
   for (const friendId of userData.friends) {
     const friendDoc = await getDoc(doc(db, 'users', friendId));
     if (friendDoc.exists()) {
@@ -122,7 +122,7 @@ export const searchUsers = async (searchTerm: string): Promise<any[]> => {
   const q = query(usersRef, where('username', '>=', searchTerm), where('username', '<=', searchTerm + '\uf8ff'));
   const querySnapshot = await getDocs(q);
   
-  const results = [];
+  const results: any[] = [];
   querySnapshot.forEach((doc) => {
     results.push({ id: doc.id, ...doc.data() });
   });
@@ -162,7 +162,7 @@ export const getMatchHistory = async (userId: string, opponentId: string): Promi
   );
   
   const querySnapshot = await getDocs(q);
-  const games = [];
+  const games: any[] = [];
   
   querySnapshot.forEach((doc) => {
     const gameData = doc.data();
@@ -207,7 +207,7 @@ export const getActiveChallenges = async (userId: string): Promise<any[]> => {
   );
   
   const querySnapshot = await getDocs(q);
-  const challenges = [];
+  const challenges: any[] = [];
   
   querySnapshot.forEach((doc) => {
     challenges.push({ id: doc.id, ...doc.data() });

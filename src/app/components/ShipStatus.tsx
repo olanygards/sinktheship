@@ -33,7 +33,7 @@ const ShipStatus: React.FC<ShipStatusProps> = ({ ships }) => {
 
   // Function to generate ship squares with appropriate letter
   const renderShipSquares = (ship: Ship, letterCode: string) => {
-    const squares = [];
+    const squares: JSX.Element[] = [];
     for (let i = 0; i < ship.size; i++) {
       squares.push(
         <div 

@@ -32,7 +32,7 @@ const getShipInfo = (type: string) => {
     }
 };
 
-const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard, isSmall }) => {
+const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard, isSmall = false }) => {
   // Debug-funktion för att kontrollera state
   React.useEffect(() => {
     const sunkShips = board
@@ -55,6 +55,46 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard
   // Generate coordinate labels A-J and 1-10
   const columnLabels = Array.from({length: 10}, (_, i) => String.fromCharCode(65 + i));
   const rowLabels = Array.from({length: 10}, (_, i) => i + 1);
+
+  const renderCell = (cell: Cell, x: number, y: number) => {
+    let cellClass = 'board-cell';
+    let content: React.ReactNode = null;
+
+    if (cell.isHit) {
+      if (cell.hasShip) {
+        if (cell.isSunkShip) {
+          // Ship is sunk
+          cellClass += ' board-cell-sunk'; // Style for sunk ship part
+          content = <div className="sunk-ship-marker">✕</div>;
+        } else {
+          // Ship is hit but not sunk
+          cellClass += ' board-cell-hit'; // Style for regular hit
+          content = <div className="hit-marker">•</div>;
+        }
+      } else {
+        // Miss
+        cellClass += ' board-cell-miss';
+        content = <div className="miss-marker">○</div>;
+      }
+    } else if (cell.hasShip && isPlayerBoard) {
+      // Show ships on player's board
+      cellClass += ' board-cell-ship';
+    }
+
+    if (isSmall) {
+      cellClass += ' board-cell-small';
+    }
+
+    return (
+      <div
+        key={`${x}-${y}`}
+        className={cellClass}
+        onClick={() => onCellClick(x, y)}
+      >
+        {content}
+      </div>
+    );
+  };
 
   return (
     <div className="board-container">
@@ -85,65 +125,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ board, onCellClick, isPlayerBoard
                 console.error(`Invalid row data at index ${y}:`, row);
                 return null; // Skip rendering this row
             }
-            return row.map((cell, x) => {
-               // Add safety check for cell validity
-               if (!cell || typeof cell.x !== 'number' || typeof cell.y !== 'number') {
-                 console.error(`Invalid cell data at (${x}, ${y}):`, cell);
-                 return <div key={`${x}-${y}`} className="board-cell bg-red-100">!</div>; // Render an error cell
-               }
-
-              // Determine cell style based on its state
-              let cellClass = 'board-cell';
-              let content = null;
-
-              if (cell.isHit) {
-                if (cell.hasShip) {
-                  // It's a hit on a ship
-                  if (cell.isSunkShip) {
-                    // Ship is sunk
-                    cellClass += ' board-cell-sunk'; // Style for sunk ship part
-                    content = <div className="sunk-ship-marker">✕</div>; 
-                  } else {
-                    // Ship is hit but not sunk
-                    cellClass += ' board-cell-hit'; // Style for regular hit
-                    content = <div className="hit-marker">✕</div>; 
-                  }
-                } else {
-                  // It's a miss
-                  cellClass += ' board-cell-miss'; // Style for miss
-                  content = <div className="miss-marker">•</div>; 
-                }
-              } else if (isPlayerBoard && cell.hasShip) {
-                 // Show player's own ships if it's their board
-                 cellClass += ` ${cell.shipType || 'unknown'}-color`; 
-                 content = <div className="ship-marker">{cell.shipType ? getShipInfo(cell.shipType).letter : '?'}</div>;
-              }
-               else {
-                // Default water cell
-                cellClass += ' board-cell-water';
-              }
-
-              // Add hover effect only if it's the opponent's board and clickable
-              if (!isPlayerBoard && !cell.isHit) {
-                 cellClass += ' hover:opacity-80 cursor-pointer';
-              }
-
-               // Add size class if small board
-               if (isSmall) {
-                 cellClass += ' small-cell';
-               }
-
-              return (
-                <div
-                  key={`${x}-${y}`}
-                  className={cellClass}
-                  onClick={() => !isPlayerBoard && !cell.isHit && onCellClick(x, y)} // Click only on opponent board, unhit cells
-                  data-is-sunk={cell.isSunkShip || false} // Add data attribute for potential CSS targeting
-                >
-                  {content} 
-                </div>
-              );
-            })
+            return row.map((cell, x) => renderCell(cell, x, y));
           })}
         </div>
       </div>
